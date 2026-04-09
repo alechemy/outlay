@@ -123,3 +123,57 @@ export interface ResolvedBox {
   outerWidth: number; // borderBoxWidth + margin.left + margin.right
   outerHeight: number;
 }
+
+export interface ResolvedBoxModel {
+  contentWidth: number;
+  contentHeight: number;
+  paddingTop: number;
+  paddingRight: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  borderTop: number;
+  borderRight: number;
+  borderBottom: number;
+  borderLeft: number;
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
+}
+
+export interface FlexLineInfo {
+  itemIds: string[];
+  mainSize: number;
+}
+
+export interface DebugTrace {
+  // After resolveBoxModel
+  resolvedBoxModels: Map<string, ResolvedBoxModel>;
+
+  // After collectFlexItems
+  flexItemOrder: string[];
+
+  // After determineMainSize
+  hypotheticalMainSizes: Map<string, number>;
+
+  // After collectIntoLines
+  flexLines: FlexLineInfo[];
+
+  // After resolveFlexibleLengths (per line)
+  resolvedMainSizes: Map<string, number>;
+  frozenItems: Map<string, "min-clamped" | "max-clamped" | "flexible">;
+
+  // After resolveCrossSize
+  resolvedCrossSizes: Map<string, number>;
+
+  // Final output
+  boxes: Map<string, ResolvedBox>;
+}
+
+export interface SolverOptions {
+  debug?: boolean;
+}
+
+export interface LayoutResultWithTrace extends LayoutResult {
+  trace?: DebugTrace;
+}
