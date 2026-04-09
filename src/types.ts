@@ -1,0 +1,125 @@
+export type TrackSize =
+  | number
+  | "auto"
+  | `${number}fr`
+  | "min-content"
+  | "max-content"
+  | { min: number | "auto"; max: number | "auto" | `${number}fr` };
+
+export type TrackDefinition =
+  | number
+  | "auto"
+  | `${number}fr`
+  | { min: number | "auto"; max: number | "auto" | `${number}fr` };
+
+export interface BoxSides {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface LayoutNode {
+  // Identity
+  id: string;
+
+  // Box model (all values in px, already resolved from CSS)
+  width?: number | "auto" | "min-content" | "max-content";
+  height?: number | "auto" | "min-content" | "max-content";
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+  padding: BoxSides; // { top, right, bottom, left } in px
+  margin: BoxSides; // supports "auto" for centering
+  border: BoxSides; // widths only, in px
+  boxSizing: "content-box" | "border-box";
+
+  // Display and layout mode
+  display: "flex" | "grid" | "block" | "none";
+
+  // Flex container properties (when display === "flex")
+  flexDirection?: "row" | "column" | "row-reverse" | "column-reverse";
+  flexWrap?: "nowrap" | "wrap" | "wrap-reverse";
+  justifyContent?:
+    | "flex-start"
+    | "flex-end"
+    | "center"
+    | "space-between"
+    | "space-around"
+    | "space-evenly";
+  alignItems?: "flex-start" | "flex-end" | "center" | "stretch" | "baseline";
+  alignContent?:
+    | "flex-start"
+    | "flex-end"
+    | "center"
+    | "stretch"
+    | "space-between"
+    | "space-around";
+  gap?: number | { row: number; column: number };
+
+  // Flex item properties
+  flexGrow?: number; // default 0
+  flexShrink?: number; // default 1
+  flexBasis?: number | "auto" | "content";
+  alignSelf?:
+    | "auto"
+    | "flex-start"
+    | "flex-end"
+    | "center"
+    | "stretch"
+    | "baseline";
+  order?: number;
+
+  // Grid container properties (Phase 3)
+  gridTemplateColumns?: TrackDefinition[];
+  gridTemplateRows?: TrackDefinition[];
+  gridAutoRows?: TrackSize;
+  gridAutoColumns?: TrackSize;
+  gridAutoFlow?: "row" | "column" | "row dense" | "column dense";
+
+  // Grid item properties (Phase 3)
+  gridColumn?: {
+    start: number | "auto";
+    end: number | "auto" | `span ${number}`;
+  };
+  gridRow?: { start: number | "auto"; end: number | "auto" | `span ${number}` };
+
+  // Children
+  children: LayoutNode[];
+
+  // Optional: intrinsic content size callback
+  // For leaf nodes whose content size is externally determined
+  // (e.g., text measured by Pretext)
+  measureContent?: (availableWidth: number) => {
+    width: number;
+    height: number;
+  };
+}
+
+export interface LayoutResult {
+  boxes: Map<string, ResolvedBox>;
+}
+
+export interface ResolvedBox {
+  id: string;
+
+  // Position relative to the root container's content box origin
+  x: number;
+  y: number;
+
+  // Final resolved dimensions (content box)
+  width: number;
+  height: number;
+
+  // Resolved box model edges
+  padding: BoxSides;
+  border: BoxSides;
+  margin: BoxSides; // includes resolved "auto" margins
+
+  // Convenience computed values
+  borderBoxWidth: number;
+  borderBoxHeight: number;
+  outerWidth: number; // borderBoxWidth + margin.left + margin.right
+  outerHeight: number;
+}

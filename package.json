@@ -1,0 +1,22 @@
+{
+  "name": "constraint-layout-algo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "ts-node tests/runner.ts",
+    "generate": "ts-node tests/generator.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "@types/puppeteer": "^5.4.7",
+    "puppeteer": "^24.40.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}
