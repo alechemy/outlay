@@ -35,6 +35,8 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
   const id = idCounter === 1 ? "root-node" : `node-${idCounter}`;
   idCounter++;
 
+  let isLeaf = false; // Set to true for items that should have no children despite depth > 0
+
   const padding = genBoxSides(rng, 20);
   const margin = genBoxSides(rng, 20);
   const border = genBoxSides(rng, 10);
@@ -217,15 +219,112 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         delete (node as any).height;
       }
     }
+  } else if (tier === 7) {
+    if (depth === 2) {
+      // Root flex container — definite sizes
+      node.display = "flex";
+      node.flexDirection = rng.nextChoice(["row", "column"] as const);
+      node.flexWrap = "nowrap";
+      node.width = rng.nextRange(400, 800);
+      node.height = rng.nextRange(300, 600);
+      if (rng.next() < 0.5) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+      if (rng.next() < 0.3) {
+        node.justifyContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "space-between",
+        ] as const);
+      }
+    } else if (depth === 1) {
+      // Mix of nested flex containers and leaf items
+      const isNestedFlex = rng.next() < 0.65;
+      if (isNestedFlex) {
+        // Nested flex container (also a flex item of the root)
+        node.display = "flex";
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        // Some have definite width, some auto
+        if (rng.next() < 0.5) {
+          node.width = rng.nextRange(80, 250);
+        }
+        // Some have definite height, some auto
+        if (rng.next() < 0.4) {
+          node.height = rng.nextRange(60, 200);
+        }
+        // Flex item properties (of the parent container)
+        node.flexGrow = rng.nextRange(0, 2);
+        node.flexShrink = rng.nextChoice([0, 1, 1]);
+        if (rng.next() < 0.4) {
+          node.flexBasis = rng.nextRange(50, 200);
+        }
+        if (rng.next() < 0.3) {
+          node.alignItems = rng.nextChoice([
+            "flex-start",
+            "flex-end",
+            "center",
+            "stretch",
+          ] as const);
+        }
+        if (rng.next() < 0.2) {
+          node.alignSelf = rng.nextChoice([
+            "flex-start",
+            "flex-end",
+            "center",
+            "stretch",
+          ] as const);
+        }
+      } else {
+        // Leaf item (no children)
+        isLeaf = true;
+        node.width = rng.nextRange(40, 150);
+        node.height = rng.nextRange(30, 120);
+        node.flexGrow = rng.nextRange(0, 2);
+        node.flexShrink = rng.nextChoice([0, 1]);
+        node.flexBasis = rng.nextChoice([0, rng.nextRange(20, 80)]);
+      }
+    } else {
+      // depth === 0: leaf items inside nested flex containers
+      if (rng.next() < 0.7) {
+        node.width = rng.nextRange(20, 100);
+      }
+      if (rng.next() < 0.7) {
+        node.height = rng.nextRange(20, 80);
+      }
+      node.flexGrow = rng.nextRange(0, 2);
+      node.flexShrink = rng.nextChoice([0, 1]);
+      if (rng.next() < 0.4) {
+        node.flexBasis = rng.nextRange(10, 60);
+      }
+      if (rng.next() < 0.2) {
+        node.alignSelf = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+    }
   }
 
-  if (depth > 0) {
+  if (depth > 0 && !isLeaf) {
     const numChildren =
-      tier === 6
-        ? rng.nextRange(4, 8)
-        : tier >= 2 && tier <= 5
+      tier === 7
+        ? depth === 2
           ? rng.nextRange(2, 5)
-          : rng.nextRange(1, 3);
+          : rng.nextRange(2, 4)
+        : tier === 6
+          ? rng.nextRange(4, 8)
+          : tier >= 2 && tier <= 5
+            ? rng.nextRange(2, 5)
+            : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
       node.children.push(genNode(rng, depth - 1, tier));
     }
@@ -276,6 +375,10 @@ function toHTML(node: LayoutNode): string {
   }
   if (node.minWidth !== undefined) styles.push(`min-width: ${node.minWidth}px`);
   if (node.maxWidth !== undefined) styles.push(`max-width: ${node.maxWidth}px`);
+  if (node.minHeight !== undefined)
+    styles.push(`min-height: ${node.minHeight}px`);
+  if (node.maxHeight !== undefined)
+    styles.push(`max-height: ${node.maxHeight}px`);
 
   const childrenHtml = node.children.map(toHTML).join("\n");
   return `<div id="${node.id}" style="${styles.join("; ")}">${childrenHtml}</div>`;
@@ -457,6 +560,7 @@ async function run() {
     tasks.push({ tier: 4, count: 100 });
     tasks.push({ tier: 5, count: 75 });
     tasks.push({ tier: 6, count: 150 });
+    tasks.push({ tier: 7, count: 200 });
   }
 
   for (const task of tasks) {

@@ -167,6 +167,164 @@ function collectIntoLines(
   return lines;
 }
 
+/**
+ * Compute the intrinsic content-box size of a flex container in a given dimension.
+ * mode: "min-content" uses flex-base-size; "max-content" uses max(flex-base, item max-content) for growable items.
+ */
+function computeIntrinsicContentSize(
+  node: LayoutNode,
+  dimension: "width" | "height",
+  nodeMap: Map<string, LayoutNode>,
+  boxModelMap: Map<string, ResolvedBoxModel>,
+  mode: "min-content" | "max-content" = "min-content",
+): number {
+  if (node.display !== "flex" || node.children.length === 0) {
+    return dimension === "width"
+      ? boxModelMap.get(node.id)!.contentWidth
+      : boxModelMap.get(node.id)!.contentHeight;
+  }
+
+  const isNodeRow =
+    node.flexDirection === "row" ||
+    node.flexDirection === "row-reverse" ||
+    node.flexDirection === undefined;
+
+  const isMainDimension = (dimension === "width") === isNodeRow;
+  const itemIds = collectFlexItems(node);
+
+  if (isMainDimension) {
+    let total = 0;
+    for (const childId of itemIds) {
+      const child = nodeMap.get(childId)!;
+      const childModel = boxModelMap.get(childId)!;
+      const pb = isNodeRow
+        ? childModel.paddingLeft +
+          childModel.paddingRight +
+          childModel.borderLeft +
+          childModel.borderRight
+        : childModel.paddingTop +
+          childModel.paddingBottom +
+          childModel.borderTop +
+          childModel.borderBottom;
+      const margin = isNodeRow
+        ? childModel.marginLeft + childModel.marginRight
+        : childModel.marginTop + childModel.marginBottom;
+
+      // Item's max-content main size (content-box)
+      let maxContentMain: number;
+      if (isNodeRow && typeof child.width === "number") {
+        maxContentMain =
+          child.boxSizing === "border-box"
+            ? Math.max(0, (child.width as number) - pb)
+            : (child.width as number);
+      } else if (!isNodeRow && typeof child.height === "number") {
+        maxContentMain =
+          child.boxSizing === "border-box"
+            ? Math.max(0, (child.height as number) - pb)
+            : (child.height as number);
+      } else if (child.display === "flex") {
+        maxContentMain = computeIntrinsicContentSize(
+          child,
+          dimension,
+          nodeMap,
+          boxModelMap,
+          mode,
+        );
+      } else {
+        maxContentMain = 0;
+      }
+
+      // Item's flex base size (content-box)
+      let flexBase: number;
+      if (typeof child.flexBasis === "number") {
+        flexBase =
+          child.boxSizing === "border-box"
+            ? Math.max(0, child.flexBasis - pb)
+            : child.flexBasis;
+      } else {
+        flexBase = maxContentMain;
+      }
+
+      // Contribution per CSS Flexbox spec 9.9.1:
+      // Growable items in width: max(flex-base, max-content) when content > 0,
+      //   OR flex-base when content=0 and item can't shrink (flex-base is hard minimum)
+      // Non-growable shrinkable with no preferred size: max-content (not flex-base)
+      // Non-growable / Height: flex-base
+      const dimProp = isNodeRow ? "width" : "height";
+      let contentSize: number;
+      if ((child.flexGrow ?? 0) > 0 && dimension === "width") {
+        if (maxContentMain > 0) {
+          contentSize = Math.max(flexBase, maxContentMain);
+        } else if ((child.flexShrink ?? 1) === 0) {
+          contentSize = flexBase;
+        } else {
+          contentSize = maxContentMain;
+        }
+      } else if (
+        dimension === "width" &&
+        (child.flexGrow ?? 0) === 0 &&
+        (child.flexShrink ?? 1) > 0 &&
+        typeof child[dimProp] !== "number" &&
+        typeof child.flexBasis === "number" &&
+        maxContentMain < flexBase
+      ) {
+        // Non-growable shrinkable item with no preferred main size:
+        // contribute max-content, not flex-base (container doesn't need
+        // to accommodate flex-basis for items that can shrink away)
+        contentSize = maxContentMain;
+      } else {
+        contentSize = flexBase;
+      }
+
+      total += contentSize + pb + margin;
+    }
+    return total;
+  } else {
+    const crossDim: "width" | "height" = isNodeRow ? "height" : "width";
+    let maxOuter = 0;
+    for (const childId of itemIds) {
+      const child = nodeMap.get(childId)!;
+      const childModel = boxModelMap.get(childId)!;
+      const crossPB = isNodeRow
+        ? childModel.paddingTop +
+          childModel.paddingBottom +
+          childModel.borderTop +
+          childModel.borderBottom
+        : childModel.paddingLeft +
+          childModel.paddingRight +
+          childModel.borderLeft +
+          childModel.borderRight;
+      const crossMargin = isNodeRow
+        ? childModel.marginTop + childModel.marginBottom
+        : childModel.marginLeft + childModel.marginRight;
+
+      let contentCross: number;
+      if (crossDim === "height" && typeof child.height === "number") {
+        contentCross =
+          child.boxSizing === "border-box"
+            ? Math.max(0, (child.height as number) - crossPB)
+            : (child.height as number);
+      } else if (crossDim === "width" && typeof child.width === "number") {
+        contentCross =
+          child.boxSizing === "border-box"
+            ? Math.max(0, (child.width as number) - crossPB)
+            : (child.width as number);
+      } else {
+        contentCross = computeIntrinsicContentSize(
+          child,
+          crossDim,
+          nodeMap,
+          boxModelMap,
+          mode,
+        );
+      }
+
+      maxOuter = Math.max(maxOuter, contentCross + crossPB + crossMargin);
+    }
+    return maxOuter;
+  }
+}
+
 export function solveLayout(
   root: LayoutNode,
   options?: SolverOptions,
@@ -187,6 +345,7 @@ export function solveLayout(
     crossOffset: number;
   }
   const containerLineLayouts = new Map<string, LineLayout[]>();
+  const parentResolvedDims = new Map<string, Set<"width" | "height">>();
 
   // Phase 1: Resolve box models for all nodes
   function resolveAllBoxModels(node: LayoutNode) {
@@ -215,24 +374,73 @@ export function solveLayout(
         node.flexDirection === "row-reverse" ||
         node.flexDirection === undefined;
 
+      const parentModel = boxModelMap.get(node.id)!;
+
       // Phase 3: Determine hypothetical main sizes
       const hypoMainSizes = new Map<string, number>();
       for (const childId of itemOrder) {
         const child = nodeMap.get(childId)!;
         const childModel = boxModelMap.get(childId)!;
-        const mainSize = determineHypotheticalMainSize(
-          child,
-          childModel,
-          isRow,
-        );
+
+        const mainDim: "width" | "height" = isRow ? "width" : "height";
+        let mainSize: number;
+        if (
+          child.display === "flex" &&
+          typeof child.flexBasis !== "number" &&
+          typeof child[mainDim] !== "number"
+        ) {
+          const intrinsicMain = computeIntrinsicContentSize(
+            child,
+            mainDim,
+            nodeMap,
+            boxModelMap,
+          );
+          const pb = isRow
+            ? childModel.paddingLeft +
+              childModel.paddingRight +
+              childModel.borderLeft +
+              childModel.borderRight
+            : childModel.paddingTop +
+              childModel.paddingBottom +
+              childModel.borderTop +
+              childModel.borderBottom;
+          mainSize = intrinsicMain + pb;
+        } else {
+          mainSize = determineHypotheticalMainSize(child, childModel, isRow);
+        }
+
         hypoMainSizes.set(childId, mainSize);
         if (trace) {
           trace.hypotheticalMainSizes.set(childId, mainSize);
         }
       }
 
+      // Handle auto main-size containers
+      const hasAutoMainSize = isRow
+        ? typeof node.width !== "number"
+        : typeof node.height !== "number";
+
+      if (hasAutoMainSize) {
+        const mainDimName: "width" | "height" = isRow ? "width" : "height";
+        const resolved = parentResolvedDims.get(node.id);
+        if (!resolved || !resolved.has(mainDimName)) {
+          let totalHypoOuter = 0;
+          for (const childId of itemOrder) {
+            const childModel = boxModelMap.get(childId)!;
+            const margin = isRow
+              ? childModel.marginLeft + childModel.marginRight
+              : childModel.marginTop + childModel.marginBottom;
+            totalHypoOuter += (hypoMainSizes.get(childId) ?? 0) + margin;
+          }
+          if (isRow) {
+            parentModel.contentWidth = totalHypoOuter;
+          } else {
+            parentModel.contentHeight = totalHypoOuter;
+          }
+        }
+      }
+
       // Phase 4: Collect into lines
-      const parentModel = boxModelMap.get(node.id)!;
       const availableMainSize = isRow
         ? parentModel.contentWidth
         : parentModel.contentHeight;
@@ -251,7 +459,6 @@ export function solveLayout(
       }
 
       // Phase 5: Resolve flexible lengths (W3C CSS Flexbox spec 9.7)
-      // Internal calculations use content-box sizes.
       for (const line of lines) {
         interface FlexItemInfo {
           id: string;
@@ -286,11 +493,23 @@ export function solveLayout(
 
           // Content-box flex base size (spec 9.2 step 3)
           let flexBaseSize: number;
+          const mainDimProp: "width" | "height" = isRow ? "width" : "height";
           if (typeof child.flexBasis === "number") {
             flexBaseSize =
               child.boxSizing === "border-box"
                 ? Math.max(0, child.flexBasis - paddingBorder)
                 : child.flexBasis;
+          } else if (
+            child.display === "flex" &&
+            typeof child[mainDimProp] !== "number"
+          ) {
+            flexBaseSize = computeIntrinsicContentSize(
+              child,
+              mainDimProp,
+              nodeMap,
+              boxModelMap,
+              mainDimProp === "width" ? "max-content" : "min-content",
+            );
           } else {
             flexBaseSize = isRow
               ? childModel.contentWidth
@@ -306,6 +525,23 @@ export function solveLayout(
                 child.boxSizing === "border-box"
                   ? Math.max(0, child.minWidth - paddingBorder)
                   : child.minWidth;
+            } else if (child.display === "flex") {
+              const contentMin = computeIntrinsicContentSize(
+                child,
+                "width",
+                nodeMap,
+                boxModelMap,
+                "min-content",
+              );
+              if (typeof child.width === "number") {
+                const specifiedContent =
+                  child.boxSizing === "border-box"
+                    ? Math.max(0, (child.width as number) - paddingBorder)
+                    : (child.width as number);
+                minContent = Math.min(specifiedContent, contentMin);
+              } else {
+                minContent = contentMin;
+              }
             }
             if (child.maxWidth !== undefined) {
               maxContent =
@@ -319,6 +555,23 @@ export function solveLayout(
                 child.boxSizing === "border-box"
                   ? Math.max(0, child.minHeight - paddingBorder)
                   : child.minHeight;
+            } else if (child.display === "flex") {
+              const contentMin = computeIntrinsicContentSize(
+                child,
+                "height",
+                nodeMap,
+                boxModelMap,
+                "min-content",
+              );
+              if (typeof child.height === "number") {
+                const specifiedContent =
+                  child.boxSizing === "border-box"
+                    ? Math.max(0, (child.height as number) - paddingBorder)
+                    : (child.height as number);
+                minContent = Math.min(specifiedContent, contentMin);
+              } else {
+                minContent = contentMin;
+              }
             }
             if (child.maxHeight !== undefined) {
               maxContent =
@@ -445,10 +698,8 @@ export function solveLayout(
           let anyFrozen = false;
 
           if (totalAdj === 0) {
-            // No violations at all
             break;
           } else if (totalAdj > 0) {
-            // Net min violations: freeze only min-violation items
             for (const { item, adj } of adjustments) {
               if (adj > 0) {
                 item.frozen = true;
@@ -456,7 +707,6 @@ export function solveLayout(
               }
             }
           } else {
-            // Net max violations: freeze only max-violation items
             for (const { item, adj } of adjustments) {
               if (adj < 0) {
                 item.frozen = true;
@@ -494,10 +744,82 @@ export function solveLayout(
           } else {
             childModel.contentHeight = Math.max(0, item.targetMainSize);
           }
+
+          // Record that the parent resolved this child's main-axis dimension
+          const resolvedDim: "width" | "height" = isRow ? "width" : "height";
+          if (!parentResolvedDims.has(item.id))
+            parentResolvedDims.set(item.id, new Set());
+          parentResolvedDims.get(item.id)!.add(resolvedDim);
         }
       }
 
-      // Phase 5.5: Compute per-line cross sizes and align-content
+      // Phase 5.5a: Compute intrinsic sizes for nested flex containers
+      for (const line of lines) {
+        for (const childId of line.itemIds) {
+          const child = nodeMap.get(childId)!;
+          if (child.display === "flex") {
+            const childIsRow =
+              child.flexDirection === "row" ||
+              child.flexDirection === "row-reverse" ||
+              child.flexDirection === undefined;
+            const childResolved = parentResolvedDims.get(childId);
+
+            // Set intrinsic cross-size (if not already resolved by parent)
+            const crossDim: "width" | "height" = childIsRow
+              ? "height"
+              : "width";
+            if (
+              typeof child[crossDim] !== "number" &&
+              !childResolved?.has(crossDim)
+            ) {
+              const intrinsicCross = computeIntrinsicContentSize(
+                child,
+                crossDim,
+                nodeMap,
+                boxModelMap,
+              );
+              const childModel = boxModelMap.get(childId)!;
+              if (childIsRow) {
+                childModel.contentHeight = intrinsicCross;
+              } else {
+                childModel.contentWidth = intrinsicCross;
+              }
+            }
+
+            // Set intrinsic main-size if needed and not resolved by parent
+            const mainDim: "width" | "height" = childIsRow ? "width" : "height";
+            if (
+              typeof child[mainDim] !== "number" &&
+              !childResolved?.has(mainDim)
+            ) {
+              const childModel = boxModelMap.get(childId)!;
+              const currentMain = childIsRow
+                ? childModel.contentWidth
+                : childModel.contentHeight;
+              if (currentMain === 0) {
+                const intrinsicMain = computeIntrinsicContentSize(
+                  child,
+                  mainDim,
+                  nodeMap,
+                  boxModelMap,
+                  mainDim === "width" ? "max-content" : "min-content",
+                );
+                if (childIsRow) {
+                  childModel.contentWidth = intrinsicMain;
+                } else {
+                  childModel.contentHeight = intrinsicMain;
+                }
+                // Record so processNode(child) doesn't override
+                if (!parentResolvedDims.has(childId))
+                  parentResolvedDims.set(childId, new Set());
+                parentResolvedDims.get(childId)!.add(mainDim);
+              }
+            }
+          }
+        }
+      }
+
+      // Phase 5.5b: Compute per-line cross sizes and align-content
       const containerCrossSize = isRow
         ? parentModel.contentHeight
         : parentModel.contentWidth;
@@ -534,9 +856,26 @@ export function solveLayout(
         });
       }
 
+      // For auto cross-size containers: set container's cross-size from line content
+      const crossDimName: "width" | "height" = isRow ? "height" : "width";
+      const crossResolvedByParent =
+        parentResolvedDims.get(node.id)?.has(crossDimName) ?? false;
+      const hasCrossAuto = isRow
+        ? typeof node.height !== "number"
+        : typeof node.width !== "number";
+
+      if (hasCrossAuto && !crossResolvedByParent) {
+        const totalLineCross = lineLayouts.reduce((s, l) => s + l.crossSize, 0);
+        if (isRow) {
+          parentModel.contentHeight = totalLineCross;
+        } else {
+          parentModel.contentWidth = totalLineCross;
+        }
+      }
+
       // Single-line nowrap: line cross size = container cross size (spec 9.4 step 8)
-      // Multi-line (wrap/wrap-reverse): line cross size stays as natural max outer cross
-      if (!wrap && lineLayouts.length === 1) {
+      const crossIsDefinite = !hasCrossAuto || crossResolvedByParent;
+      if (!wrap && lineLayouts.length === 1 && crossIsDefinite) {
         lineLayouts[0].crossSize = containerCrossSize;
       }
 
@@ -577,10 +916,8 @@ export function solveLayout(
               interLineGap = remainingCross / numLines;
               crossStart = interLineGap / 2;
             } else if (node.flexWrap === "wrap-reverse") {
-              // With wrap-reverse, cross-start is swapped so safe overflow → flex-end pre-flip
               crossStart = remainingCross;
             }
-            // else: flex-start fallback (crossStart=0)
             break;
         }
 
@@ -639,6 +976,11 @@ export function solveLayout(
             } else {
               childModel.contentWidth = stretchedContent;
             }
+            // Record that parent resolved this child's cross dimension
+            const stretchDim: "width" | "height" = isRow ? "height" : "width";
+            if (!parentResolvedDims.has(childId))
+              parentResolvedDims.set(childId, new Set());
+            parentResolvedDims.get(childId)!.add(stretchDim);
           }
 
           const crossSize = isRow
@@ -969,8 +1311,6 @@ export function solveLayout(
               contentBoxX + lineLayout.crossOffset + itemCrossOffset;
             childBorderBoxY = contentBoxY + currentMainPos + mainMarginStart;
           }
-
-          // wrap-reverse line offsets already handled in processNode
 
           currentMainPos +=
             mainMarginStart + mainBorderBox + mainMarginEnd + interItemGap;
