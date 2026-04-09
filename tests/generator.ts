@@ -99,11 +99,49 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         node.maxWidth = rng.nextRange(100, 350);
       }
     }
+  } else if (tier === 4) {
+    if (depth > 0) {
+      // Flex Container — row or column direction, with definite sizes
+      node.display = "flex";
+      node.flexDirection = rng.nextChoice(["row", "column"] as const);
+      node.flexWrap = "nowrap";
+      node.width = rng.nextRange(300, 600);
+      node.height = rng.nextRange(200, 500);
+      // align-items on the container
+      node.alignItems = rng.nextChoice([
+        "flex-start",
+        "flex-end",
+        "center",
+        "stretch",
+      ] as const);
+    } else {
+      // Flex Item with cross-axis properties
+      // Some items have definite cross size, some don't (for stretch testing)
+      if (rng.next() < 0.6) {
+        node.height = rng.nextRange(30, 150);
+      }
+      if (rng.next() < 0.6) {
+        node.width = rng.nextRange(30, 150);
+      }
+      node.flexGrow = rng.nextRange(0, 2);
+      node.flexShrink = rng.nextChoice([0, 1, 1]);
+      node.flexBasis = rng.nextChoice([0, rng.nextRange(20, 100)]);
+      // align-self override on ~40% of items
+      if (rng.next() < 0.4) {
+        node.alignSelf = rng.nextChoice([
+          "auto",
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+    }
   }
 
   if (depth > 0) {
     const numChildren =
-      tier === 2 || tier === 3 ? rng.nextRange(2, 5) : rng.nextRange(1, 3);
+      tier >= 2 && tier <= 4 ? rng.nextRange(2, 5) : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
       node.children.push(genNode(rng, depth - 1, tier));
     }
@@ -133,7 +171,11 @@ function toHTML(node: LayoutNode): string {
     if (node.flexDirection)
       styles.push(`flex-direction: ${node.flexDirection}`);
     if (node.flexWrap) styles.push(`flex-wrap: ${node.flexWrap}`);
+    if (node.alignItems) styles.push(`align-items: ${node.alignItems}`);
   }
+
+  if (node.alignSelf && node.alignSelf !== "auto")
+    styles.push(`align-self: ${node.alignSelf}`);
 
   if (node.flexGrow !== undefined) styles.push(`flex-grow: ${node.flexGrow}`);
   if (node.flexShrink !== undefined)
@@ -167,7 +209,7 @@ async function generateFixtures(
     const seed = tier * 10000 + i;
     const rng = new RNG(seed);
     idCounter = 1;
-    const tree = genNode(rng, tier === 2 || tier === 3 ? 1 : 2, tier);
+    const tree = genNode(rng, tier >= 2 && tier <= 4 ? 1 : 2, tier);
 
     // For test stability, position root container absolutely at 0,0
     // to avoid body margins affecting things (even though we reset them)
@@ -325,6 +367,7 @@ async function run() {
     tasks.push({ tier: 1, count: 50 });
     tasks.push({ tier: 2, count: 100 });
     tasks.push({ tier: 3, count: 150 });
+    tasks.push({ tier: 4, count: 100 });
   }
 
   for (const task of tasks) {

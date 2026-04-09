@@ -452,20 +452,55 @@ export function solveLayout(
         }
       }
 
-      // Phase 6: Resolve cross sizes (stub)
+      // Phase 6: Resolve cross sizes
+      const containerCrossSize = isRow
+        ? parentModel.contentHeight
+        : parentModel.contentWidth;
+
       for (const childId of itemOrder) {
+        const child = nodeMap.get(childId)!;
         const childModel = boxModelMap.get(childId)!;
-        const crossSize = isRow
-          ? childModel.contentHeight +
-            childModel.paddingTop +
+
+        const effectiveAlign =
+          (child.alignSelf && child.alignSelf !== "auto"
+            ? child.alignSelf
+            : node.alignItems) ?? "stretch";
+
+        const crossPaddingBorder = isRow
+          ? childModel.paddingTop +
             childModel.paddingBottom +
             childModel.borderTop +
             childModel.borderBottom
-          : childModel.contentWidth +
-            childModel.paddingLeft +
+          : childModel.paddingLeft +
             childModel.paddingRight +
             childModel.borderLeft +
             childModel.borderRight;
+
+        const crossMargin = isRow
+          ? childModel.marginTop + childModel.marginBottom
+          : childModel.marginLeft + childModel.marginRight;
+
+        // Check if the child has a definite cross size
+        const hasDefiniteCrossSize = isRow
+          ? typeof child.height === "number"
+          : typeof child.width === "number";
+
+        if (effectiveAlign === "stretch" && !hasDefiniteCrossSize) {
+          // Stretch: set content cross size = container cross - margins - padding/border
+          const stretchedContent = Math.max(
+            0,
+            containerCrossSize - crossMargin - crossPaddingBorder,
+          );
+          if (isRow) {
+            childModel.contentHeight = stretchedContent;
+          } else {
+            childModel.contentWidth = stretchedContent;
+          }
+        }
+
+        const crossSize = isRow
+          ? childModel.contentHeight + crossPaddingBorder
+          : childModel.contentWidth + crossPaddingBorder;
         if (trace) {
           trace.resolvedCrossSizes.set(childId, crossSize);
         }
@@ -532,8 +567,7 @@ export function solveLayout(
     const contentBoxX = borderBoxX + model.borderLeft + model.paddingLeft;
     const contentBoxY = borderBoxY + model.borderTop + model.paddingTop;
 
-    let currentChildX = 0;
-    let currentChildY = 0;
+    let currentMainPos = 0;
 
     // Sort items if flex, otherwise DOM order
     const orderedChildren =
@@ -541,26 +575,21 @@ export function solveLayout(
         ? [...node.children].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         : node.children;
 
+    const isFlex = node.display === "flex";
     const isRow =
-      node.display === "flex" &&
+      isFlex &&
       (node.flexDirection === "row" ||
         node.flexDirection === "row-reverse" ||
         node.flexDirection === undefined);
-    const isColumn =
-      node.display === "flex" &&
-      (node.flexDirection === "column" ||
-        node.flexDirection === "column-reverse");
+
+    const containerCrossContentSize = isRow
+      ? model.contentHeight
+      : model.contentWidth;
 
     for (const child of orderedChildren) {
       if (child.display === "none") continue;
 
       const childModel = boxModelMap.get(child.id)!;
-      const childBorderBoxX =
-        contentBoxX + currentChildX + childModel.marginLeft;
-      const childBorderBoxY =
-        contentBoxY + currentChildY + childModel.marginTop;
-
-      emitBoxes(child, childBorderBoxX, childBorderBoxY);
 
       const childBorderBoxWidth =
         childModel.contentWidth +
@@ -576,17 +605,74 @@ export function solveLayout(
         childModel.borderTop +
         childModel.borderBottom;
 
-      if (isRow) {
-        currentChildX +=
-          childModel.marginLeft + childBorderBoxWidth + childModel.marginRight;
-      } else if (isColumn) {
-        currentChildY +=
-          childModel.marginTop + childBorderBoxHeight + childModel.marginBottom;
+      let childBorderBoxX: number;
+      let childBorderBoxY: number;
+
+      if (isFlex) {
+        // Compute cross-axis offset based on alignment
+        const effectiveAlign =
+          (child.alignSelf && child.alignSelf !== "auto"
+            ? child.alignSelf
+            : node.alignItems) ?? "stretch";
+
+        const crossBorderBox = isRow
+          ? childBorderBoxHeight
+          : childBorderBoxWidth;
+        const crossMarginStart = isRow
+          ? childModel.marginTop
+          : childModel.marginLeft;
+        const crossMarginEnd = isRow
+          ? childModel.marginBottom
+          : childModel.marginRight;
+        const outerCross = crossBorderBox + crossMarginStart + crossMarginEnd;
+
+        let crossOffset: number;
+        switch (effectiveAlign) {
+          case "flex-end":
+            crossOffset =
+              containerCrossContentSize - outerCross + crossMarginStart;
+            break;
+          case "center":
+            crossOffset =
+              (containerCrossContentSize - outerCross) / 2 + crossMarginStart;
+            break;
+          case "flex-start":
+            crossOffset = crossMarginStart;
+            break;
+          case "stretch":
+          default:
+            crossOffset = crossMarginStart;
+            break;
+        }
+
+        const mainMarginStart = isRow
+          ? childModel.marginLeft
+          : childModel.marginTop;
+        const mainMarginEnd = isRow
+          ? childModel.marginRight
+          : childModel.marginBottom;
+        const mainBorderBox = isRow
+          ? childBorderBoxWidth
+          : childBorderBoxHeight;
+
+        if (isRow) {
+          childBorderBoxX = contentBoxX + currentMainPos + mainMarginStart;
+          childBorderBoxY = contentBoxY + crossOffset;
+        } else {
+          childBorderBoxX = contentBoxX + crossOffset;
+          childBorderBoxY = contentBoxY + currentMainPos + mainMarginStart;
+        }
+
+        currentMainPos += mainMarginStart + mainBorderBox + mainMarginEnd;
       } else {
         // Block layout
-        currentChildY +=
+        childBorderBoxX = contentBoxX + childModel.marginLeft;
+        childBorderBoxY = contentBoxY + currentMainPos + childModel.marginTop;
+        currentMainPos +=
           childModel.marginTop + childBorderBoxHeight + childModel.marginBottom;
       }
+
+      emitBoxes(child, childBorderBoxX, childBorderBoxY);
     }
   }
 
