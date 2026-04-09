@@ -214,22 +214,50 @@ export function solveLayout(
   }
   processNode(root);
 
-  // Phase 7: Produce final boxes (stub — still zeros for non-trivial layout)
-  function emitBoxes(node: LayoutNode) {
+  // Phase 7: Produce final boxes
+  function emitBoxes(node: LayoutNode, borderBoxX: number, borderBoxY: number) {
     const model = boxModelMap.get(node.id)!;
+    const borderBoxWidth =
+      model.contentWidth +
+      model.paddingLeft +
+      model.paddingRight +
+      model.borderLeft +
+      model.borderRight;
+    const borderBoxHeight =
+      model.contentHeight +
+      model.paddingTop +
+      model.paddingBottom +
+      model.borderTop +
+      model.borderBottom;
+
     const box: ResolvedBox = {
       id: node.id,
-      x: 0,
-      y: 0,
-      width: 0,
-      height: 0,
-      padding: { ...ZERO_SIDES },
-      border: { ...ZERO_SIDES },
-      margin: { ...ZERO_SIDES },
-      borderBoxWidth: 0,
-      borderBoxHeight: 0,
-      outerWidth: 0,
-      outerHeight: 0,
+      x: borderBoxX,
+      y: borderBoxY,
+      width: model.contentWidth,
+      height: model.contentHeight,
+      padding: {
+        top: model.paddingTop,
+        right: model.paddingRight,
+        bottom: model.paddingBottom,
+        left: model.paddingLeft,
+      },
+      border: {
+        top: model.borderTop,
+        right: model.borderRight,
+        bottom: model.borderBottom,
+        left: model.borderLeft,
+      },
+      margin: {
+        top: model.marginTop,
+        right: model.marginRight,
+        bottom: model.marginBottom,
+        left: model.marginLeft,
+      },
+      borderBoxWidth,
+      borderBoxHeight,
+      outerWidth: borderBoxWidth + model.marginLeft + model.marginRight,
+      outerHeight: borderBoxHeight + model.marginTop + model.marginBottom,
     };
 
     result.boxes.set(node.id, box);
@@ -237,11 +265,35 @@ export function solveLayout(
       trace.boxes.set(node.id, box);
     }
 
+    const contentBoxX = borderBoxX + model.borderLeft + model.paddingLeft;
+    const contentBoxY = borderBoxY + model.borderTop + model.paddingTop;
+
+    let currentChildY = 0;
     for (const child of node.children) {
-      emitBoxes(child);
+      if (child.display === "none") continue;
+
+      const childModel = boxModelMap.get(child.id)!;
+      const childBorderBoxX = contentBoxX + childModel.marginLeft;
+      const childBorderBoxY =
+        contentBoxY + currentChildY + childModel.marginTop;
+
+      emitBoxes(child, childBorderBoxX, childBorderBoxY);
+
+      const childBorderBoxHeight =
+        childModel.contentHeight +
+        childModel.paddingTop +
+        childModel.paddingBottom +
+        childModel.borderTop +
+        childModel.borderBottom;
+      currentChildY +=
+        childModel.marginTop + childBorderBoxHeight + childModel.marginBottom;
     }
   }
-  emitBoxes(root);
+
+  const rootModel = boxModelMap.get(root.id)!;
+  const rootBorderBoxX = -(rootModel.borderLeft + rootModel.paddingLeft);
+  const rootBorderBoxY = -(rootModel.borderTop + rootModel.paddingTop);
+  emitBoxes(root, rootBorderBoxX, rootBorderBoxY);
 
   if (trace) {
     result.trace = trace;
