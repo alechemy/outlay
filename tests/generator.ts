@@ -179,11 +179,53 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         }
       }
     }
+  } else if (tier === 6) {
+    if (depth > 0) {
+      // Flex Container with wrapping
+      node.display = "flex";
+      node.flexDirection = rng.nextChoice(["row", "column"] as const);
+      node.flexWrap = rng.nextChoice(["wrap", "wrap-reverse"] as const);
+      node.width = rng.nextRange(200, 400);
+      node.height = rng.nextRange(200, 400);
+      node.alignContent = rng.nextChoice([
+        "flex-start",
+        "flex-end",
+        "center",
+        "stretch",
+        "space-between",
+        "space-around",
+      ] as const);
+      if (rng.next() < 0.5) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+    } else {
+      // Flex Item — sized to force wrapping
+      node.width = rng.nextRange(40, 150);
+      node.height = rng.nextRange(30, 100);
+      node.flexGrow = rng.nextChoice([0, 0, 1]);
+      node.flexShrink = rng.nextChoice([0, 0, 1]);
+      if (rng.next() < 0.5) {
+        node.flexBasis = rng.nextRange(30, 120);
+      }
+      // Sometimes remove cross dimension for stretch testing
+      if (rng.next() < 0.25) {
+        delete (node as any).height;
+      }
+    }
   }
 
   if (depth > 0) {
     const numChildren =
-      tier >= 2 && tier <= 5 ? rng.nextRange(2, 5) : rng.nextRange(1, 3);
+      tier === 6
+        ? rng.nextRange(4, 8)
+        : tier >= 2 && tier <= 5
+          ? rng.nextRange(2, 5)
+          : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
       node.children.push(genNode(rng, depth - 1, tier));
     }
@@ -216,6 +258,7 @@ function toHTML(node: LayoutNode): string {
     if (node.alignItems) styles.push(`align-items: ${node.alignItems}`);
     if (node.justifyContent)
       styles.push(`justify-content: ${node.justifyContent}`);
+    if (node.alignContent) styles.push(`align-content: ${node.alignContent}`);
   }
 
   if (node.alignSelf && node.alignSelf !== "auto")
@@ -253,7 +296,7 @@ async function generateFixtures(
     const seed = tier * 10000 + i;
     const rng = new RNG(seed);
     idCounter = 1;
-    const tree = genNode(rng, tier >= 2 && tier <= 5 ? 1 : 2, tier);
+    const tree = genNode(rng, tier >= 2 && tier <= 6 ? 1 : 2, tier);
 
     // For test stability, position root container absolutely at 0,0
     // to avoid body margins affecting things (even though we reset them)
@@ -413,6 +456,7 @@ async function run() {
     tasks.push({ tier: 3, count: 150 });
     tasks.push({ tier: 4, count: 100 });
     tasks.push({ tier: 5, count: 75 });
+    tasks.push({ tier: 6, count: 150 });
   }
 
   for (const task of tasks) {

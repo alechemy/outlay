@@ -120,19 +120,51 @@ function collectIntoLines(
   hypotheticalMainSizes: Map<string, number>,
   boxModelMap: Map<string, ResolvedBoxModel>,
   isRow: boolean,
-  _availableMainSize: number,
-  _wrap: boolean,
+  availableMainSize: number,
+  wrap: boolean,
 ): FlexLineInfo[] {
-  // Stub: single line with all items
-  let totalMainSize = 0;
+  if (!wrap || itemIds.length === 0) {
+    let totalMainSize = 0;
+    for (const id of itemIds) {
+      const model = boxModelMap.get(id)!;
+      const margin = isRow
+        ? model.marginLeft + model.marginRight
+        : model.marginTop + model.marginBottom;
+      totalMainSize += (hypotheticalMainSizes.get(id) ?? 0) + margin;
+    }
+    return [{ itemIds: [...itemIds], mainSize: totalMainSize }];
+  }
+
+  // Multi-line wrapping (spec 9.3)
+  const lines: FlexLineInfo[] = [];
+  let currentLineIds: string[] = [];
+  let currentLineSize = 0;
+
   for (const id of itemIds) {
     const model = boxModelMap.get(id)!;
     const margin = isRow
       ? model.marginLeft + model.marginRight
       : model.marginTop + model.marginBottom;
-    totalMainSize += (hypotheticalMainSizes.get(id) ?? 0) + margin;
+    const outerHypo = (hypotheticalMainSizes.get(id) ?? 0) + margin;
+
+    if (
+      currentLineIds.length > 0 &&
+      currentLineSize + outerHypo > availableMainSize
+    ) {
+      lines.push({ itemIds: currentLineIds, mainSize: currentLineSize });
+      currentLineIds = [id];
+      currentLineSize = outerHypo;
+    } else {
+      currentLineIds.push(id);
+      currentLineSize += outerHypo;
+    }
   }
-  return [{ itemIds: [...itemIds], mainSize: totalMainSize }];
+
+  if (currentLineIds.length > 0) {
+    lines.push({ itemIds: currentLineIds, mainSize: currentLineSize });
+  }
+
+  return lines;
 }
 
 export function solveLayout(
@@ -148,6 +180,13 @@ export function solveLayout(
 
   const nodeMap = new Map<string, LayoutNode>();
   const boxModelMap = new Map<string, ResolvedBoxModel>();
+
+  interface LineLayout {
+    itemIds: string[];
+    crossSize: number;
+    crossOffset: number;
+  }
+  const containerLineLayouts = new Map<string, LineLayout[]>();
 
   // Phase 1: Resolve box models for all nodes
   function resolveAllBoxModels(node: LayoutNode) {
@@ -177,6 +216,7 @@ export function solveLayout(
         node.flexDirection === undefined;
 
       // Phase 3: Determine hypothetical main sizes
+      const hypoMainSizes = new Map<string, number>();
       for (const childId of itemOrder) {
         const child = nodeMap.get(childId)!;
         const childModel = boxModelMap.get(childId)!;
@@ -185,6 +225,7 @@ export function solveLayout(
           childModel,
           isRow,
         );
+        hypoMainSizes.set(childId, mainSize);
         if (trace) {
           trace.hypotheticalMainSizes.set(childId, mainSize);
         }
@@ -199,7 +240,7 @@ export function solveLayout(
 
       const lines = collectIntoLines(
         itemOrder,
-        trace?.hypotheticalMainSizes ?? new Map(),
+        hypoMainSizes,
         boxModelMap,
         isRow,
         availableMainSize,
@@ -456,57 +497,156 @@ export function solveLayout(
         }
       }
 
-      // Phase 6: Resolve cross sizes
+      // Phase 5.5: Compute per-line cross sizes and align-content
       const containerCrossSize = isRow
         ? parentModel.contentHeight
         : parentModel.contentWidth;
 
-      for (const childId of itemOrder) {
-        const child = nodeMap.get(childId)!;
-        const childModel = boxModelMap.get(childId)!;
-
-        const effectiveAlign =
-          (child.alignSelf && child.alignSelf !== "auto"
-            ? child.alignSelf
-            : node.alignItems) ?? "stretch";
-
-        const crossPaddingBorder = isRow
-          ? childModel.paddingTop +
-            childModel.paddingBottom +
-            childModel.borderTop +
-            childModel.borderBottom
-          : childModel.paddingLeft +
-            childModel.paddingRight +
-            childModel.borderLeft +
-            childModel.borderRight;
-
-        const crossMargin = isRow
-          ? childModel.marginTop + childModel.marginBottom
-          : childModel.marginLeft + childModel.marginRight;
-
-        // Check if the child has a definite cross size
-        const hasDefiniteCrossSize = isRow
-          ? typeof child.height === "number"
-          : typeof child.width === "number";
-
-        if (effectiveAlign === "stretch" && !hasDefiniteCrossSize) {
-          // Stretch: set content cross size = container cross - margins - padding/border
-          const stretchedContent = Math.max(
-            0,
-            containerCrossSize - crossMargin - crossPaddingBorder,
+      const lineLayouts: LineLayout[] = [];
+      for (const line of lines) {
+        let maxOuterCross = 0;
+        for (const childId of line.itemIds) {
+          const childModel = boxModelMap.get(childId)!;
+          const crossPB = isRow
+            ? childModel.paddingTop +
+              childModel.paddingBottom +
+              childModel.borderTop +
+              childModel.borderBottom
+            : childModel.paddingLeft +
+              childModel.paddingRight +
+              childModel.borderLeft +
+              childModel.borderRight;
+          const crossContent = isRow
+            ? childModel.contentHeight
+            : childModel.contentWidth;
+          const crossMarg = isRow
+            ? childModel.marginTop + childModel.marginBottom
+            : childModel.marginLeft + childModel.marginRight;
+          maxOuterCross = Math.max(
+            maxOuterCross,
+            crossContent + crossPB + crossMarg,
           );
-          if (isRow) {
-            childModel.contentHeight = stretchedContent;
-          } else {
-            childModel.contentWidth = stretchedContent;
-          }
+        }
+        lineLayouts.push({
+          itemIds: [...line.itemIds],
+          crossSize: maxOuterCross,
+          crossOffset: 0,
+        });
+      }
+
+      // Single-line nowrap: line cross size = container cross size (spec 9.4 step 8)
+      // Multi-line (wrap/wrap-reverse): line cross size stays as natural max outer cross
+      if (!wrap && lineLayouts.length === 1) {
+        lineLayouts[0].crossSize = containerCrossSize;
+      }
+
+      // Apply align-content for multi-line containers (wrap/wrap-reverse)
+      if (wrap) {
+        const totalLineCross = lineLayouts.reduce((s, l) => s + l.crossSize, 0);
+        const remainingCross = containerCrossSize - totalLineCross;
+        const alignContent = node.alignContent ?? "stretch";
+        const numLines = lineLayouts.length;
+
+        let crossStart = 0;
+        let interLineGap = 0;
+
+        switch (alignContent) {
+          case "flex-start":
+            break;
+          case "flex-end":
+            crossStart = remainingCross;
+            break;
+          case "center":
+            crossStart = remainingCross / 2;
+            break;
+          case "stretch":
+            if (remainingCross > 0) {
+              const extra = remainingCross / numLines;
+              for (const ll of lineLayouts) {
+                ll.crossSize += extra;
+              }
+            }
+            break;
+          case "space-between":
+            if (remainingCross > 0 && numLines > 1) {
+              interLineGap = remainingCross / (numLines - 1);
+            }
+            break;
+          case "space-around":
+            if (remainingCross > 0 && numLines > 0) {
+              interLineGap = remainingCross / numLines;
+              crossStart = interLineGap / 2;
+            } else if (node.flexWrap === "wrap-reverse") {
+              // With wrap-reverse, cross-start is swapped so safe overflow → flex-end pre-flip
+              crossStart = remainingCross;
+            }
+            // else: flex-start fallback (crossStart=0)
+            break;
         }
 
-        const crossSize = isRow
-          ? childModel.contentHeight + crossPaddingBorder
-          : childModel.contentWidth + crossPaddingBorder;
-        if (trace) {
-          trace.resolvedCrossSizes.set(childId, crossSize);
+        let curCrossOffset = crossStart;
+        for (const ll of lineLayouts) {
+          ll.crossOffset = curCrossOffset;
+          curCrossOffset += ll.crossSize + interLineGap;
+        }
+      }
+
+      // Handle wrap-reverse: reverse line cross offsets
+      if (node.flexWrap === "wrap-reverse") {
+        for (const ll of lineLayouts) {
+          ll.crossOffset = containerCrossSize - ll.crossOffset - ll.crossSize;
+        }
+      }
+
+      containerLineLayouts.set(node.id, lineLayouts);
+
+      // Phase 6: Resolve cross sizes per line
+      for (const lineLayout of lineLayouts) {
+        for (const childId of lineLayout.itemIds) {
+          const child = nodeMap.get(childId)!;
+          const childModel = boxModelMap.get(childId)!;
+
+          const effectiveAlign =
+            (child.alignSelf && child.alignSelf !== "auto"
+              ? child.alignSelf
+              : node.alignItems) ?? "stretch";
+
+          const crossPaddingBorder = isRow
+            ? childModel.paddingTop +
+              childModel.paddingBottom +
+              childModel.borderTop +
+              childModel.borderBottom
+            : childModel.paddingLeft +
+              childModel.paddingRight +
+              childModel.borderLeft +
+              childModel.borderRight;
+
+          const crossMargin = isRow
+            ? childModel.marginTop + childModel.marginBottom
+            : childModel.marginLeft + childModel.marginRight;
+
+          const hasDefiniteCrossSize = isRow
+            ? typeof child.height === "number"
+            : typeof child.width === "number";
+
+          if (effectiveAlign === "stretch" && !hasDefiniteCrossSize) {
+            const stretchedContent = Math.max(
+              0,
+              lineLayout.crossSize - crossMargin - crossPaddingBorder,
+            );
+            if (isRow) {
+              childModel.contentHeight = stretchedContent;
+            } else {
+              childModel.contentWidth = stretchedContent;
+            }
+          }
+
+          const crossSize = isRow
+            ? childModel.contentHeight + crossPaddingBorder
+            : childModel.contentWidth + crossPaddingBorder;
+          if (trace) {
+            trace.resolvedCrossSizes.set(childId, crossSize);
+          }
         }
       }
     }
@@ -571,12 +711,6 @@ export function solveLayout(
     const contentBoxX = borderBoxX + model.borderLeft + model.paddingLeft;
     const contentBoxY = borderBoxY + model.borderTop + model.paddingTop;
 
-    // Sort items if flex, otherwise DOM order
-    const orderedChildren =
-      node.display === "flex"
-        ? [...node.children].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-        : node.children;
-
     const isFlex = node.display === "flex";
     const isRow =
       isFlex &&
@@ -584,255 +718,288 @@ export function solveLayout(
         node.flexDirection === "row-reverse" ||
         node.flexDirection === undefined);
 
-    const containerCrossContentSize = isRow
-      ? model.contentHeight
-      : model.contentWidth;
-
-    // Resolve justify-content and auto margins for flex containers
-    let mainAxisOffset = 0;
-    let interItemGap = 0;
-
     if (isFlex) {
-      const containerMainSize = isRow
-        ? model.contentWidth
-        : model.contentHeight;
-      const visibleChildren = orderedChildren.filter(
-        (c) => c.display !== "none",
-      );
+      const lineLayouts = containerLineLayouts.get(node.id) ?? [];
+      const wrapReverse = node.flexWrap === "wrap-reverse";
+      const containerCrossContentSize = isRow
+        ? model.contentHeight
+        : model.contentWidth;
 
-      // Calculate total outer main sizes and count auto margins
-      let totalOuterMain = 0;
-      let autoMarginCount = 0;
-
-      for (const child of visibleChildren) {
-        const cm = boxModelMap.get(child.id)!;
-        const borderBox = isRow
-          ? cm.contentWidth +
-            cm.paddingLeft +
-            cm.paddingRight +
-            cm.borderLeft +
-            cm.borderRight
-          : cm.contentHeight +
-            cm.paddingTop +
-            cm.paddingBottom +
-            cm.borderTop +
-            cm.borderBottom;
-        const marginStart = isRow ? cm.marginLeft : cm.marginTop;
-        const marginEnd = isRow ? cm.marginRight : cm.marginBottom;
-        totalOuterMain += marginStart + borderBox + marginEnd;
-
-        const origMargin = child.margin;
-        if (isRow) {
-          if (origMargin.left === "auto") autoMarginCount++;
-          if (origMargin.right === "auto") autoMarginCount++;
-        } else {
-          if (origMargin.top === "auto") autoMarginCount++;
-          if (origMargin.bottom === "auto") autoMarginCount++;
-        }
+      // Build child lookup by id
+      const childById = new Map<string, LayoutNode>();
+      for (const child of node.children) {
+        childById.set(child.id, child);
       }
 
-      const remainingSpace = containerMainSize - totalOuterMain;
+      for (const lineLayout of lineLayouts) {
+        const lineItems = lineLayout.itemIds.map((id) => childById.get(id)!);
 
-      if (autoMarginCount > 0) {
-        // Auto margins absorb free space; justify-content is ignored
-        const perAutoMargin =
-          remainingSpace > 0 ? remainingSpace / autoMarginCount : 0;
+        // --- Justify-content / auto margins for this line ---
+        let mainAxisOffset = 0;
+        let interItemGap = 0;
 
-        for (const child of visibleChildren) {
+        const containerMainSize = isRow
+          ? model.contentWidth
+          : model.contentHeight;
+
+        let totalOuterMain = 0;
+        let autoMarginCount = 0;
+
+        for (const child of lineItems) {
           const cm = boxModelMap.get(child.id)!;
-          const origMargin = child.margin;
+          const borderBox = isRow
+            ? cm.contentWidth +
+              cm.paddingLeft +
+              cm.paddingRight +
+              cm.borderLeft +
+              cm.borderRight
+            : cm.contentHeight +
+              cm.paddingTop +
+              cm.paddingBottom +
+              cm.borderTop +
+              cm.borderBottom;
+          const marginStart = isRow ? cm.marginLeft : cm.marginTop;
+          const marginEnd = isRow ? cm.marginRight : cm.marginBottom;
+          totalOuterMain += marginStart + borderBox + marginEnd;
 
+          const origMargin = child.margin;
           if (isRow) {
-            if (origMargin.left === "auto") cm.marginLeft = perAutoMargin;
-            if (origMargin.right === "auto") cm.marginRight = perAutoMargin;
+            if (origMargin.left === "auto") autoMarginCount++;
+            if (origMargin.right === "auto") autoMarginCount++;
           } else {
-            if (origMargin.top === "auto") cm.marginTop = perAutoMargin;
-            if (origMargin.bottom === "auto") cm.marginBottom = perAutoMargin;
+            if (origMargin.top === "auto") autoMarginCount++;
+            if (origMargin.bottom === "auto") autoMarginCount++;
           }
         }
-      } else {
-        // Apply justify-content
-        const n = visibleChildren.length;
-        const justifyContent = node.justifyContent ?? "flex-start";
 
-        switch (justifyContent) {
-          case "flex-end":
-            mainAxisOffset = remainingSpace;
-            break;
-          case "center":
-            mainAxisOffset = remainingSpace / 2;
-            break;
-          case "space-between":
-            if (remainingSpace > 0 && n > 1) {
-              interItemGap = remainingSpace / (n - 1);
-            }
-            break;
-          case "space-around":
-            if (remainingSpace > 0 && n > 0) {
-              interItemGap = remainingSpace / n;
-              mainAxisOffset = interItemGap / 2;
-            } else {
-              mainAxisOffset = remainingSpace / 2;
-            }
-            break;
-          case "space-evenly":
-            if (remainingSpace > 0 && n > 0) {
-              interItemGap = remainingSpace / (n + 1);
-              mainAxisOffset = interItemGap;
-            } else {
-              mainAxisOffset = remainingSpace / 2;
-            }
-            break;
-          case "flex-start":
-          default:
-            break;
-        }
-      }
-    }
+        const remainingSpace = containerMainSize - totalOuterMain;
 
-    let currentMainPos = mainAxisOffset;
+        if (autoMarginCount > 0) {
+          const perAutoMargin =
+            remainingSpace > 0 ? remainingSpace / autoMarginCount : 0;
 
-    for (const child of orderedChildren) {
-      if (child.display === "none") continue;
+          for (const child of lineItems) {
+            const cm = boxModelMap.get(child.id)!;
+            const origMargin = child.margin;
 
-      const childModel = boxModelMap.get(child.id)!;
-
-      const childBorderBoxWidth =
-        childModel.contentWidth +
-        childModel.paddingLeft +
-        childModel.paddingRight +
-        childModel.borderLeft +
-        childModel.borderRight;
-
-      const childBorderBoxHeight =
-        childModel.contentHeight +
-        childModel.paddingTop +
-        childModel.paddingBottom +
-        childModel.borderTop +
-        childModel.borderBottom;
-
-      let childBorderBoxX: number;
-      let childBorderBoxY: number;
-
-      if (isFlex) {
-        const crossBorderBox = isRow
-          ? childBorderBoxHeight
-          : childBorderBoxWidth;
-
-        // Resolve cross-axis auto margins (overrides align-self/align-items)
-        const origMargin = child.margin;
-        const crossStartAuto = isRow
-          ? origMargin.top === "auto"
-          : origMargin.left === "auto";
-        const crossEndAuto = isRow
-          ? origMargin.bottom === "auto"
-          : origMargin.right === "auto";
-
-        let crossOffset: number;
-
-        if (crossStartAuto || crossEndAuto) {
-          const nonAutoStart = isRow
-            ? childModel.marginTop
-            : childModel.marginLeft;
-          const nonAutoEnd = isRow
-            ? childModel.marginBottom
-            : childModel.marginRight;
-          const remainingCross =
-            containerCrossContentSize -
-            crossBorderBox -
-            nonAutoStart -
-            nonAutoEnd;
-          const crossFreeSpace = Math.max(0, remainingCross);
-
-          if (crossStartAuto && crossEndAuto) {
-            const each = crossFreeSpace / 2;
             if (isRow) {
-              childModel.marginTop = each;
-              childModel.marginBottom = each;
+              if (origMargin.left === "auto") cm.marginLeft = perAutoMargin;
+              if (origMargin.right === "auto") cm.marginRight = perAutoMargin;
             } else {
-              childModel.marginLeft = each;
-              childModel.marginRight = each;
+              if (origMargin.top === "auto") cm.marginTop = perAutoMargin;
+              if (origMargin.bottom === "auto") cm.marginBottom = perAutoMargin;
             }
-            crossOffset = each;
-          } else if (crossStartAuto) {
-            if (isRow) {
-              childModel.marginTop = crossFreeSpace;
-            } else {
-              childModel.marginLeft = crossFreeSpace;
-            }
-            crossOffset = crossFreeSpace;
-          } else {
-            // crossEndAuto
-            if (isRow) {
-              childModel.marginBottom = crossFreeSpace;
-            } else {
-              childModel.marginRight = crossFreeSpace;
-            }
-            crossOffset = isRow ? childModel.marginTop : childModel.marginLeft;
           }
         } else {
-          // Normal alignment (no cross-axis auto margins)
-          const effectiveAlign =
-            (child.alignSelf && child.alignSelf !== "auto"
-              ? child.alignSelf
-              : node.alignItems) ?? "stretch";
+          const n = lineItems.length;
+          const justifyContent = node.justifyContent ?? "flex-start";
 
-          const crossMarginStart = isRow
-            ? childModel.marginTop
-            : childModel.marginLeft;
-          const crossMarginEnd = isRow
-            ? childModel.marginBottom
-            : childModel.marginRight;
-          const outerCross = crossBorderBox + crossMarginStart + crossMarginEnd;
-
-          switch (effectiveAlign) {
+          switch (justifyContent) {
             case "flex-end":
-              crossOffset =
-                containerCrossContentSize - outerCross + crossMarginStart;
+              mainAxisOffset = remainingSpace;
               break;
             case "center":
-              crossOffset =
-                (containerCrossContentSize - outerCross) / 2 + crossMarginStart;
+              mainAxisOffset = remainingSpace / 2;
+              break;
+            case "space-between":
+              if (remainingSpace > 0 && n > 1) {
+                interItemGap = remainingSpace / (n - 1);
+              }
+              break;
+            case "space-around":
+              if (remainingSpace > 0 && n > 0) {
+                interItemGap = remainingSpace / n;
+                mainAxisOffset = interItemGap / 2;
+              } else {
+                mainAxisOffset = remainingSpace / 2;
+              }
+              break;
+            case "space-evenly":
+              if (remainingSpace > 0 && n > 0) {
+                interItemGap = remainingSpace / (n + 1);
+                mainAxisOffset = interItemGap;
+              } else {
+                mainAxisOffset = remainingSpace / 2;
+              }
               break;
             case "flex-start":
-              crossOffset = crossMarginStart;
-              break;
-            case "stretch":
             default:
-              crossOffset = crossMarginStart;
               break;
           }
         }
 
-        const mainMarginStart = isRow
-          ? childModel.marginLeft
-          : childModel.marginTop;
-        const mainMarginEnd = isRow
-          ? childModel.marginRight
-          : childModel.marginBottom;
-        const mainBorderBox = isRow
-          ? childBorderBoxWidth
-          : childBorderBoxHeight;
+        // --- Position items in this line ---
+        let currentMainPos = mainAxisOffset;
 
-        if (isRow) {
-          childBorderBoxX = contentBoxX + currentMainPos + mainMarginStart;
-          childBorderBoxY = contentBoxY + crossOffset;
-        } else {
-          childBorderBoxX = contentBoxX + crossOffset;
-          childBorderBoxY = contentBoxY + currentMainPos + mainMarginStart;
+        for (const child of lineItems) {
+          const childModel = boxModelMap.get(child.id)!;
+
+          const childBorderBoxWidth =
+            childModel.contentWidth +
+            childModel.paddingLeft +
+            childModel.paddingRight +
+            childModel.borderLeft +
+            childModel.borderRight;
+
+          const childBorderBoxHeight =
+            childModel.contentHeight +
+            childModel.paddingTop +
+            childModel.paddingBottom +
+            childModel.borderTop +
+            childModel.borderBottom;
+
+          const crossBorderBox = isRow
+            ? childBorderBoxHeight
+            : childBorderBoxWidth;
+
+          // Resolve cross-axis auto margins within this line
+          const origMargin = child.margin;
+          const crossStartAuto = isRow
+            ? origMargin.top === "auto"
+            : origMargin.left === "auto";
+          const crossEndAuto = isRow
+            ? origMargin.bottom === "auto"
+            : origMargin.right === "auto";
+
+          let itemCrossOffset: number;
+
+          if (crossStartAuto || crossEndAuto) {
+            const nonAutoStart = isRow
+              ? childModel.marginTop
+              : childModel.marginLeft;
+            const nonAutoEnd = isRow
+              ? childModel.marginBottom
+              : childModel.marginRight;
+            const remainingCross =
+              lineLayout.crossSize - crossBorderBox - nonAutoStart - nonAutoEnd;
+            const crossFreeSpace = Math.max(0, remainingCross);
+
+            if (crossStartAuto && crossEndAuto) {
+              const each = crossFreeSpace / 2;
+              if (isRow) {
+                childModel.marginTop = each;
+                childModel.marginBottom = each;
+              } else {
+                childModel.marginLeft = each;
+                childModel.marginRight = each;
+              }
+              itemCrossOffset = each;
+            } else if (crossStartAuto) {
+              if (isRow) {
+                childModel.marginTop = crossFreeSpace;
+              } else {
+                childModel.marginLeft = crossFreeSpace;
+              }
+              itemCrossOffset = crossFreeSpace;
+            } else {
+              // crossEndAuto
+              if (isRow) {
+                childModel.marginBottom = crossFreeSpace;
+              } else {
+                childModel.marginRight = crossFreeSpace;
+              }
+              itemCrossOffset = isRow
+                ? childModel.marginTop
+                : childModel.marginLeft;
+            }
+          } else {
+            // Normal alignment (no cross-axis auto margins)
+            const effectiveAlign =
+              (child.alignSelf && child.alignSelf !== "auto"
+                ? child.alignSelf
+                : node.alignItems) ?? "stretch";
+
+            const crossMarginStart = isRow
+              ? childModel.marginTop
+              : childModel.marginLeft;
+            const crossMarginEnd = isRow
+              ? childModel.marginBottom
+              : childModel.marginRight;
+            const outerCross =
+              crossBorderBox + crossMarginStart + crossMarginEnd;
+
+            // For wrap-reverse, cross-start/end are swapped: swap flex-start/flex-end
+            let resolvedAlign = effectiveAlign;
+            if (wrapReverse) {
+              if (
+                resolvedAlign === "flex-start" ||
+                resolvedAlign === "stretch"
+              ) {
+                resolvedAlign = "flex-end";
+              } else if (resolvedAlign === "flex-end") {
+                resolvedAlign = "flex-start";
+              }
+            }
+
+            switch (resolvedAlign) {
+              case "flex-end":
+                itemCrossOffset =
+                  lineLayout.crossSize - outerCross + crossMarginStart;
+                break;
+              case "center":
+                itemCrossOffset =
+                  (lineLayout.crossSize - outerCross) / 2 + crossMarginStart;
+                break;
+              case "flex-start":
+              default:
+                itemCrossOffset = crossMarginStart;
+                break;
+            }
+          }
+
+          const mainMarginStart = isRow
+            ? childModel.marginLeft
+            : childModel.marginTop;
+          const mainMarginEnd = isRow
+            ? childModel.marginRight
+            : childModel.marginBottom;
+          const mainBorderBox = isRow
+            ? childBorderBoxWidth
+            : childBorderBoxHeight;
+
+          let childBorderBoxX: number;
+          let childBorderBoxY: number;
+
+          if (isRow) {
+            childBorderBoxX = contentBoxX + currentMainPos + mainMarginStart;
+            childBorderBoxY =
+              contentBoxY + lineLayout.crossOffset + itemCrossOffset;
+          } else {
+            childBorderBoxX =
+              contentBoxX + lineLayout.crossOffset + itemCrossOffset;
+            childBorderBoxY = contentBoxY + currentMainPos + mainMarginStart;
+          }
+
+          // wrap-reverse line offsets already handled in processNode
+
+          currentMainPos +=
+            mainMarginStart + mainBorderBox + mainMarginEnd + interItemGap;
+
+          emitBoxes(child, childBorderBoxX, childBorderBoxY);
         }
+      }
+    } else {
+      // Block layout
+      let currentMainPos = 0;
+      for (const child of node.children) {
+        if (child.display === "none") continue;
 
-        currentMainPos +=
-          mainMarginStart + mainBorderBox + mainMarginEnd + interItemGap;
-      } else {
-        // Block layout
-        childBorderBoxX = contentBoxX + childModel.marginLeft;
-        childBorderBoxY = contentBoxY + currentMainPos + childModel.marginTop;
+        const childModel = boxModelMap.get(child.id)!;
+        const childBorderBoxHeight =
+          childModel.contentHeight +
+          childModel.paddingTop +
+          childModel.paddingBottom +
+          childModel.borderTop +
+          childModel.borderBottom;
+
+        const childBorderBoxX = contentBoxX + childModel.marginLeft;
+        const childBorderBoxY =
+          contentBoxY + currentMainPos + childModel.marginTop;
         currentMainPos +=
           childModel.marginTop + childBorderBoxHeight + childModel.marginBottom;
-      }
 
-      emitBoxes(child, childBorderBoxX, childBorderBoxY);
+        emitBoxes(child, childBorderBoxX, childBorderBoxY);
+      }
     }
   }
 
