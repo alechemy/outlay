@@ -179,6 +179,11 @@ function computeIntrinsicContentSize(
   mode: "min-content" | "max-content" = "min-content",
 ): number {
   if (node.display !== "flex" || node.children.length === 0) {
+    if (node.measureContent) {
+      const availW = mode === "min-content" ? 0 : Infinity;
+      const measured = node.measureContent(availW);
+      return dimension === "width" ? measured.width : measured.height;
+    }
     return dimension === "width"
       ? boxModelMap.get(node.id)!.contentWidth
       : boxModelMap.get(node.id)!.contentHeight;
@@ -230,6 +235,10 @@ function computeIntrinsicContentSize(
           boxModelMap,
           mode,
         );
+      } else if (child.measureContent) {
+        const availW = mode === "min-content" ? 0 : Infinity;
+        const measured = child.measureContent(availW);
+        maxContentMain = isNodeRow ? measured.width : measured.height;
       } else {
         maxContentMain = 0;
       }
@@ -383,6 +392,15 @@ export function solveLayout(
         const childModel = boxModelMap.get(childId)!;
 
         const mainDim: "width" | "height" = isRow ? "width" : "height";
+        const pb = isRow
+          ? childModel.paddingLeft +
+            childModel.paddingRight +
+            childModel.borderLeft +
+            childModel.borderRight
+          : childModel.paddingTop +
+            childModel.paddingBottom +
+            childModel.borderTop +
+            childModel.borderBottom;
         let mainSize: number;
         if (
           child.display === "flex" &&
@@ -395,16 +413,16 @@ export function solveLayout(
             nodeMap,
             boxModelMap,
           );
-          const pb = isRow
-            ? childModel.paddingLeft +
-              childModel.paddingRight +
-              childModel.borderLeft +
-              childModel.borderRight
-            : childModel.paddingTop +
-              childModel.paddingBottom +
-              childModel.borderTop +
-              childModel.borderBottom;
           mainSize = intrinsicMain + pb;
+        } else if (
+          child.measureContent &&
+          typeof child.flexBasis !== "number" &&
+          typeof child[mainDim] !== "number"
+        ) {
+          // Content-based sizing: flex-basis auto/content with measureContent
+          const measured = child.measureContent(Infinity);
+          const contentMain = isRow ? measured.width : measured.height;
+          mainSize = contentMain + pb;
         } else {
           mainSize = determineHypotheticalMainSize(child, childModel, isRow);
         }
@@ -424,18 +442,34 @@ export function solveLayout(
         const mainDimName: "width" | "height" = isRow ? "width" : "height";
         const resolved = parentResolvedDims.get(node.id);
         if (!resolved || !resolved.has(mainDimName)) {
-          let totalHypoOuter = 0;
-          for (const childId of itemOrder) {
-            const childModel = boxModelMap.get(childId)!;
-            const margin = isRow
-              ? childModel.marginLeft + childModel.marginRight
-              : childModel.marginTop + childModel.marginBottom;
-            totalHypoOuter += (hypoMainSizes.get(childId) ?? 0) + margin;
-          }
-          if (isRow) {
-            parentModel.contentWidth = totalHypoOuter;
+          const dimValue = isRow ? node.width : node.height;
+          if (dimValue === "min-content" || dimValue === "max-content") {
+            const intrinsic = computeIntrinsicContentSize(
+              node,
+              mainDimName,
+              nodeMap,
+              boxModelMap,
+              dimValue as "min-content" | "max-content",
+            );
+            if (isRow) {
+              parentModel.contentWidth = intrinsic;
+            } else {
+              parentModel.contentHeight = intrinsic;
+            }
           } else {
-            parentModel.contentHeight = totalHypoOuter;
+            let totalHypoOuter = 0;
+            for (const childId of itemOrder) {
+              const childModel = boxModelMap.get(childId)!;
+              const margin = isRow
+                ? childModel.marginLeft + childModel.marginRight
+                : childModel.marginTop + childModel.marginBottom;
+              totalHypoOuter += (hypoMainSizes.get(childId) ?? 0) + margin;
+            }
+            if (isRow) {
+              parentModel.contentWidth = totalHypoOuter;
+            } else {
+              parentModel.contentHeight = totalHypoOuter;
+            }
           }
         }
       }
@@ -510,6 +544,12 @@ export function solveLayout(
               boxModelMap,
               mainDimProp === "width" ? "max-content" : "min-content",
             );
+          } else if (
+            child.measureContent &&
+            typeof child[mainDimProp] !== "number"
+          ) {
+            const measured = child.measureContent(Infinity);
+            flexBaseSize = isRow ? measured.width : measured.height;
           } else {
             flexBaseSize = isRow
               ? childModel.contentWidth
@@ -542,6 +582,9 @@ export function solveLayout(
               } else {
                 minContent = contentMin;
               }
+            } else if (child.measureContent) {
+              const measured = child.measureContent(0);
+              minContent = measured.width;
             }
             if (child.maxWidth !== undefined) {
               maxContent =
@@ -572,6 +615,9 @@ export function solveLayout(
               } else {
                 minContent = contentMin;
               }
+            } else if (child.measureContent) {
+              const measured = child.measureContent(0);
+              minContent = measured.height;
             }
             if (child.maxHeight !== undefined) {
               maxContent =
@@ -813,6 +859,32 @@ export function solveLayout(
                 if (!parentResolvedDims.has(childId))
                   parentResolvedDims.set(childId, new Set());
                 parentResolvedDims.get(childId)!.add(mainDim);
+              }
+            }
+          }
+        }
+      }
+
+      // Phase 5.5a2: Resolve cross sizes for measureContent items
+      for (const line of lines) {
+        for (const childId of line.itemIds) {
+          const child = nodeMap.get(childId)!;
+          if (child.measureContent && child.display !== "flex") {
+            const crossDim: "width" | "height" = isRow ? "height" : "width";
+            const hasDefiniteCross = typeof child[crossDim] === "number";
+            if (!hasDefiniteCross) {
+              const childModel = boxModelMap.get(childId)!;
+              // Call measureContent with the resolved main-axis content size
+              const resolvedMainContent = isRow
+                ? childModel.contentWidth
+                : childModel.contentHeight;
+              const measured = child.measureContent(
+                isRow ? resolvedMainContent : Infinity,
+              );
+              if (isRow) {
+                childModel.contentHeight = measured.height;
+              } else {
+                childModel.contentWidth = measured.width;
               }
             }
           }

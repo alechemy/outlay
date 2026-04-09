@@ -219,6 +219,70 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         delete (node as any).height;
       }
     }
+  } else if (tier === 8) {
+    if (depth > 0) {
+      // Flex Container
+      node.display = "flex";
+      node.flexDirection = rng.nextChoice(["row", "row", "column"] as const);
+      node.flexWrap = "nowrap";
+      node.width = rng.nextRange(300, 700);
+      node.height = rng.nextRange(200, 500);
+      // ~15% chance of min-content/max-content width
+      const widthMode = rng.next();
+      if (widthMode < 0.08) {
+        node.width = "min-content" as any;
+      } else if (widthMode < 0.16) {
+        node.width = "max-content" as any;
+      }
+      if (rng.next() < 0.3) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+      if (rng.next() < 0.2) {
+        node.justifyContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "space-between",
+        ] as const);
+      }
+    } else {
+      // Leaf items — mix of content items and explicit-size items
+      const hasContent = rng.next() < 0.6;
+      if (hasContent) {
+        // Content item: no explicit width/height, size driven by measureContent
+        isLeaf = true;
+        const basisChoice = rng.next();
+        if (basisChoice < 0.5) {
+          // flex-basis: auto (default) — falls back to content size
+          // Leave flexBasis undefined
+        } else if (basisChoice < 0.75) {
+          node.flexBasis = "content" as any;
+        } else {
+          // Numeric flex-basis — content provides auto min-width
+          node.flexBasis = rng.nextRange(20, 120);
+        }
+        node.flexGrow = rng.nextChoice([0, 0, 1, 2]);
+        node.flexShrink = rng.nextChoice([0, 1, 1]);
+        // Store content dimensions (will be extracted into contentMeasurements)
+        const contentWidth = rng.nextRange(30, 150);
+        const contentHeight = rng.nextRange(20, 80);
+        (node as any)._contentWidth = contentWidth;
+        (node as any)._contentHeight = contentHeight;
+      } else {
+        // Explicit-size item (no content callback)
+        isLeaf = true;
+        node.width = rng.nextRange(40, 200);
+        node.height = rng.nextRange(30, 150);
+        node.flexGrow = rng.nextChoice([0, 0, 1]);
+        node.flexShrink = rng.nextChoice([0, 1, 1]);
+        node.flexBasis = rng.nextChoice([0, rng.nextRange(20, 100)]);
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -380,7 +444,11 @@ function toHTML(node: LayoutNode): string {
   if (node.maxHeight !== undefined)
     styles.push(`max-height: ${node.maxHeight}px`);
 
-  const childrenHtml = node.children.map(toHTML).join("\n");
+  let childrenHtml = node.children.map(toHTML).join("\n");
+  // For content items, inject a fixed-size span as intrinsic content
+  if ((node as any)._contentWidth !== undefined) {
+    childrenHtml += `<span style="display:block; width:${(node as any)._contentWidth}px; height:${(node as any)._contentHeight}px;"></span>`;
+  }
   return `<div id="${node.id}" style="${styles.join("; ")}">${childrenHtml}</div>`;
 }
 
@@ -399,7 +467,11 @@ async function generateFixtures(
     const seed = tier * 10000 + i;
     const rng = new RNG(seed);
     idCounter = 1;
-    const tree = genNode(rng, tier >= 2 && tier <= 6 ? 1 : 2, tier);
+    const tree = genNode(
+      rng,
+      (tier >= 2 && tier <= 6) || tier === 8 ? 1 : 2,
+      tier,
+    );
 
     // For test stability, position root container absolutely at 0,0
     // to avoid body margins affecting things (even though we reset them)
@@ -513,7 +585,27 @@ async function generateFixtures(
       return boxes;
     });
 
-    const fixture = {
+    // Extract contentMeasurements and strip internal fields from the tree
+    const contentMeasurements: Record<
+      string,
+      { width: number; height: number }
+    > = {};
+    function extractContentMeasurements(n: any) {
+      if (n._contentWidth !== undefined) {
+        contentMeasurements[n.id] = {
+          width: n._contentWidth,
+          height: n._contentHeight,
+        };
+        delete n._contentWidth;
+        delete n._contentHeight;
+      }
+      if (n.children) {
+        for (const child of n.children) extractContentMeasurements(child);
+      }
+    }
+    extractContentMeasurements(tree);
+
+    const fixture: any = {
       tier,
       seed,
       description: `Tier ${tier} randomly generated fixture (seed ${seed})`,
@@ -522,6 +614,10 @@ async function generateFixtures(
       chromiumVersion: version,
       tolerance: 0.5,
     };
+
+    if (Object.keys(contentMeasurements).length > 0) {
+      fixture.contentMeasurements = contentMeasurements;
+    }
 
     const filePath = path.join(fixturesDir, `tier-${tier}-${seed}.json`);
     fs.writeFileSync(filePath, JSON.stringify(fixture, null, 2));
@@ -561,6 +657,7 @@ async function run() {
     tasks.push({ tier: 5, count: 75 });
     tasks.push({ tier: 6, count: 150 });
     tasks.push({ tier: 7, count: 200 });
+    tasks.push({ tier: 8, count: 100 });
   }
 
   for (const task of tasks) {

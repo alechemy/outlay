@@ -43,8 +43,32 @@ function runTests() {
     const fixturePath = path.join(fixturesDir, file);
     const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf-8"));
 
-    const { input, expected, tolerance = 0.5, seed, tier } = fixture;
+    const {
+      input,
+      expected,
+      tolerance = 0.5,
+      seed,
+      tier,
+      contentMeasurements,
+    } = fixture;
     const nodeCount = Object.keys(expected).length;
+
+    // Attach measureContent callbacks from fixture contentMeasurements
+    if (contentMeasurements) {
+      function attachMeasureContent(node: any) {
+        const data = contentMeasurements[node.id];
+        if (data) {
+          node.measureContent = (_availableWidth: number) => ({
+            width: data.width,
+            height: data.height,
+          });
+        }
+        if (node.children) {
+          for (const child of node.children) attachMeasureContent(child);
+        }
+      }
+      attachMeasureContent(input);
+    }
 
     if (!tierStats[tier]) {
       tierStats[tier] = { passed: 0, failed: 0 };

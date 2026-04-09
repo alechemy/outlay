@@ -1,0 +1,126 @@
+{
+  "tier": 8,
+  "seed": 80014,
+  "description": "Tier 8 randomly generated fixture (seed 80014)",
+  "input": {
+    "id": "root-node",
+    "padding": {
+      "top": 8,
+      "right": 3,
+      "bottom": 0,
+      "left": 15
+    },
+    "margin": {
+      "top": 20,
+      "right": 0,
+      "bottom": 4,
+      "left": 9
+    },
+    "border": {
+      "top": 8,
+      "right": 3,
+      "bottom": 10,
+      "left": 8
+    },
+    "boxSizing": "content-box",
+    "display": "flex",
+    "children": [
+      {
+        "id": "node-2",
+        "padding": {
+          "top": 15,
+          "right": 17,
+          "bottom": 20,
+          "left": 19
+        },
+        "margin": {
+          "top": 18,
+          "right": 4,
+          "bottom": 5,
+          "left": 9
+        },
+        "border": {
+          "top": 0,
+          "right": 0,
+          "bottom": 10,
+          "left": 0
+        },
+        "boxSizing": "border-box",
+        "display": "block",
+        "children": [],
+        "width": 137,
+        "height": 130,
+        "flexGrow": 0,
+        "flexShrink": 0,
+        "flexBasis": 70
+      }
+    ],
+    "flexDirection": "column",
+    "flexWrap": "nowrap",
+    "width": 458,
+    "height": 455,
+    "alignItems": "flex-start"
+  },
+  "expected": {
+    "root-node": {
+      "id": "root-node",
+      "x": -23,
+      "y": -16,
+      "width": 458,
+      "height": 455,
+      "padding": {
+        "top": 8,
+        "right": 3,
+        "bottom": 0,
+        "left": 15
+      },
+      "border": {
+        "top": 8,
+        "right": 3,
+        "bottom": 10,
+        "left": 8
+      },
+      "margin": {
+        "top": 20,
+        "right": 0,
+        "bottom": 4,
+        "left": 9
+      },
+      "borderBoxWidth": 487,
+      "borderBoxHeight": 481,
+      "outerWidth": 496,
+      "outerHeight": 505
+    },
+    "node-2": {
+      "id": "node-2",
+      "x": 9,
+      "y": 18,
+      "width": 101,
+      "height": 25,
+      "padding": {
+        "top": 15,
+        "right": 17,
+        "bottom": 20,
+        "left": 19
+      },
+      "border": {
+        "top": 0,
+        "right": 0,
+        "bottom": 10,
+        "left": 0
+      },
+      "margin": {
+        "top": 18,
+        "right": 4,
+        "bottom": 5,
+        "left": 9
+      },
+      "borderBoxWidth": 137,
+      "borderBoxHeight": 70,
+      "outerWidth": 150,
+      "outerHeight": 93
+    }
+  },
+  "chromiumVersion": "Chrome/146.0.7680.153",
+  "tolerance": 0.5
+}
