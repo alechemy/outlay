@@ -137,11 +137,53 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         ] as const);
       }
     }
+  } else if (tier === 5) {
+    if (depth > 0) {
+      // Flex Container with justify-content
+      node.display = "flex";
+      node.flexDirection = rng.nextChoice(["row", "column"] as const);
+      node.flexWrap = "nowrap";
+      node.width = rng.nextRange(300, 700);
+      node.height = rng.nextRange(200, 500);
+      node.justifyContent = rng.nextChoice([
+        "flex-start",
+        "flex-end",
+        "center",
+        "space-between",
+        "space-around",
+        "space-evenly",
+      ] as const);
+    } else {
+      // Flex Item — some with auto margins on main axis
+      node.height = rng.nextRange(30, 150);
+      node.width = rng.nextRange(30, 150);
+      node.flexGrow = rng.nextChoice([0, 0, 1]);
+      node.flexShrink = rng.nextChoice([0, 1]);
+      node.flexBasis = rng.nextChoice([0, rng.nextRange(20, 80)]);
+      // ~35% chance of auto margins on main axis
+      if (rng.next() < 0.35) {
+        const autoMode = rng.nextChoice(["start", "end", "both"] as const);
+        // We'll set main-axis auto margins; the axis depends on the parent's
+        // flex-direction, but since we don't know it here, we set both
+        // horizontal and vertical auto margins and let the HTML handle it.
+        // Actually, we always set left/right for row and top/bottom for column,
+        // but we don't know the parent direction here. Instead, mark both axes
+        // and the parent direction will determine which matters.
+        if (autoMode === "start" || autoMode === "both") {
+          (node.margin as any).left = "auto";
+          (node.margin as any).top = "auto";
+        }
+        if (autoMode === "end" || autoMode === "both") {
+          (node.margin as any).right = "auto";
+          (node.margin as any).bottom = "auto";
+        }
+      }
+    }
   }
 
   if (depth > 0) {
     const numChildren =
-      tier >= 2 && tier <= 4 ? rng.nextRange(2, 5) : rng.nextRange(1, 3);
+      tier >= 2 && tier <= 5 ? rng.nextRange(2, 5) : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
       node.children.push(genNode(rng, depth - 1, tier));
     }
@@ -159,7 +201,7 @@ function toHTML(node: LayoutNode): string {
       ? `height: ${node.height}${typeof node.height === "number" ? "px" : ""}`
       : "",
     `padding: ${node.padding.top}px ${node.padding.right}px ${node.padding.bottom}px ${node.padding.left}px`,
-    `margin: ${node.margin.top}px ${node.margin.right}px ${node.margin.bottom}px ${node.margin.left}px`,
+    `margin: ${node.margin.top === "auto" ? "auto" : node.margin.top + "px"} ${node.margin.right === "auto" ? "auto" : node.margin.right + "px"} ${node.margin.bottom === "auto" ? "auto" : node.margin.bottom + "px"} ${node.margin.left === "auto" ? "auto" : node.margin.left + "px"}`,
     `border-width: ${node.border.top}px ${node.border.right}px ${node.border.bottom}px ${node.border.left}px`,
     `border-style: solid`,
     `border-color: black`,
@@ -172,6 +214,8 @@ function toHTML(node: LayoutNode): string {
       styles.push(`flex-direction: ${node.flexDirection}`);
     if (node.flexWrap) styles.push(`flex-wrap: ${node.flexWrap}`);
     if (node.alignItems) styles.push(`align-items: ${node.alignItems}`);
+    if (node.justifyContent)
+      styles.push(`justify-content: ${node.justifyContent}`);
   }
 
   if (node.alignSelf && node.alignSelf !== "auto")
@@ -209,7 +253,7 @@ async function generateFixtures(
     const seed = tier * 10000 + i;
     const rng = new RNG(seed);
     idCounter = 1;
-    const tree = genNode(rng, tier >= 2 && tier <= 4 ? 1 : 2, tier);
+    const tree = genNode(rng, tier >= 2 && tier <= 5 ? 1 : 2, tier);
 
     // For test stability, position root container absolutely at 0,0
     // to avoid body margins affecting things (even though we reset them)
@@ -368,6 +412,7 @@ async function run() {
     tasks.push({ tier: 2, count: 100 });
     tasks.push({ tier: 3, count: 150 });
     tasks.push({ tier: 4, count: 100 });
+    tasks.push({ tier: 5, count: 75 });
   }
 
   for (const task of tasks) {

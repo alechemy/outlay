@@ -19,6 +19,13 @@ export interface BoxSides {
   left: number;
 }
 
+export interface MarginBoxSides {
+  top: number | "auto";
+  right: number | "auto";
+  bottom: number | "auto";
+  left: number | "auto";
+}
+
 export interface LayoutNode {
   // Identity
   id: string;
@@ -31,7 +38,7 @@ export interface LayoutNode {
   minHeight?: number;
   maxHeight?: number;
   padding: BoxSides; // { top, right, bottom, left } in px
-  margin: BoxSides; // supports "auto" for centering
+  margin: MarginBoxSides; // supports "auto" for centering
   border: BoxSides; // widths only, in px
   boxSizing: "content-box" | "border-box";
 
