@@ -75,9 +75,27 @@ function determineHypotheticalMainSize(
   boxModel: ResolvedBoxModel,
   isRow: boolean,
 ): number {
+  let contentBaseSize = isRow ? boxModel.contentWidth : boxModel.contentHeight;
+  if (typeof child.flexBasis === "number") {
+    if (child.boxSizing === "border-box") {
+      const paddingBorder = isRow
+        ? boxModel.paddingLeft +
+          boxModel.paddingRight +
+          boxModel.borderLeft +
+          boxModel.borderRight
+        : boxModel.paddingTop +
+          boxModel.paddingBottom +
+          boxModel.borderTop +
+          boxModel.borderBottom;
+      contentBaseSize = Math.max(0, child.flexBasis - paddingBorder);
+    } else {
+      contentBaseSize = child.flexBasis;
+    }
+  }
+
   if (isRow) {
     return (
-      boxModel.contentWidth +
+      contentBaseSize +
       boxModel.paddingLeft +
       boxModel.paddingRight +
       boxModel.borderLeft +
@@ -85,7 +103,7 @@ function determineHypotheticalMainSize(
     );
   }
   return (
-    boxModel.contentHeight +
+    contentBaseSize +
     boxModel.paddingTop +
     boxModel.paddingBottom +
     boxModel.borderTop +
@@ -96,13 +114,19 @@ function determineHypotheticalMainSize(
 function collectIntoLines(
   itemIds: string[],
   hypotheticalMainSizes: Map<string, number>,
+  boxModelMap: Map<string, ResolvedBoxModel>,
+  isRow: boolean,
   _availableMainSize: number,
   _wrap: boolean,
 ): FlexLineInfo[] {
   // Stub: single line with all items
   let totalMainSize = 0;
   for (const id of itemIds) {
-    totalMainSize += hypotheticalMainSizes.get(id) ?? 0;
+    const model = boxModelMap.get(id)!;
+    const margin = isRow
+      ? model.marginLeft + model.marginRight
+      : model.marginTop + model.marginBottom;
+    totalMainSize += (hypotheticalMainSizes.get(id) ?? 0) + margin;
   }
   return [{ itemIds: [...itemIds], mainSize: totalMainSize }];
 }
@@ -172,6 +196,8 @@ export function solveLayout(
       const lines = collectIntoLines(
         itemOrder,
         trace?.hypotheticalMainSizes ?? new Map(),
+        boxModelMap,
+        isRow,
         availableMainSize,
         wrap,
       );
@@ -179,12 +205,66 @@ export function solveLayout(
         trace.flexLines.push(...lines);
       }
 
-      // Phase 5: Resolve flexible lengths (stub — no grow/shrink yet)
-      for (const childId of itemOrder) {
-        const mainSize = trace?.hypotheticalMainSizes.get(childId) ?? 0;
-        if (trace) {
-          trace.resolvedMainSizes.set(childId, mainSize);
-          trace.frozenItems.set(childId, "flexible");
+      // Phase 5: Resolve flexible lengths
+      for (const line of lines) {
+        let totalMainSize = 0;
+        let totalFlexGrow = 0;
+
+        for (const childId of line.itemIds) {
+          const child = nodeMap.get(childId)!;
+          const childModel = boxModelMap.get(childId)!;
+          const hypoMainSize =
+            trace?.hypotheticalMainSizes.get(childId) ??
+            determineHypotheticalMainSize(child, childModel, isRow);
+          const marginMain = isRow
+            ? childModel.marginLeft + childModel.marginRight
+            : childModel.marginTop + childModel.marginBottom;
+          totalMainSize += hypoMainSize + marginMain;
+          totalFlexGrow += child.flexGrow ?? 0;
+        }
+
+        const freeSpace = availableMainSize - totalMainSize;
+
+        for (const childId of line.itemIds) {
+          const child = nodeMap.get(childId)!;
+          const childModel = boxModelMap.get(childId)!;
+          const hypoMainSize =
+            trace?.hypotheticalMainSizes.get(childId) ??
+            determineHypotheticalMainSize(child, childModel, isRow);
+
+          let targetMainSize = hypoMainSize;
+
+          if (freeSpace > 0 && totalFlexGrow > 0) {
+            const flexGrow = child.flexGrow ?? 0;
+            targetMainSize += (flexGrow / totalFlexGrow) * freeSpace;
+          }
+
+          if (trace) {
+            trace.resolvedMainSizes.set(childId, targetMainSize);
+            trace.frozenItems.set(childId, "flexible");
+          }
+
+          const paddingBorder = isRow
+            ? childModel.paddingLeft +
+              childModel.paddingRight +
+              childModel.borderLeft +
+              childModel.borderRight
+            : childModel.paddingTop +
+              childModel.paddingBottom +
+              childModel.borderTop +
+              childModel.borderBottom;
+
+          if (isRow) {
+            childModel.contentWidth = Math.max(
+              0,
+              targetMainSize - paddingBorder,
+            );
+          } else {
+            childModel.contentHeight = Math.max(
+              0,
+              targetMainSize - paddingBorder,
+            );
+          }
         }
       }
 
@@ -268,16 +348,42 @@ export function solveLayout(
     const contentBoxX = borderBoxX + model.borderLeft + model.paddingLeft;
     const contentBoxY = borderBoxY + model.borderTop + model.paddingTop;
 
+    let currentChildX = 0;
     let currentChildY = 0;
-    for (const child of node.children) {
+
+    // Sort items if flex, otherwise DOM order
+    const orderedChildren =
+      node.display === "flex"
+        ? [...node.children].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        : node.children;
+
+    const isRow =
+      node.display === "flex" &&
+      (node.flexDirection === "row" ||
+        node.flexDirection === "row-reverse" ||
+        node.flexDirection === undefined);
+    const isColumn =
+      node.display === "flex" &&
+      (node.flexDirection === "column" ||
+        node.flexDirection === "column-reverse");
+
+    for (const child of orderedChildren) {
       if (child.display === "none") continue;
 
       const childModel = boxModelMap.get(child.id)!;
-      const childBorderBoxX = contentBoxX + childModel.marginLeft;
+      const childBorderBoxX =
+        contentBoxX + currentChildX + childModel.marginLeft;
       const childBorderBoxY =
         contentBoxY + currentChildY + childModel.marginTop;
 
       emitBoxes(child, childBorderBoxX, childBorderBoxY);
+
+      const childBorderBoxWidth =
+        childModel.contentWidth +
+        childModel.paddingLeft +
+        childModel.paddingRight +
+        childModel.borderLeft +
+        childModel.borderRight;
 
       const childBorderBoxHeight =
         childModel.contentHeight +
@@ -285,8 +391,18 @@ export function solveLayout(
         childModel.paddingBottom +
         childModel.borderTop +
         childModel.borderBottom;
-      currentChildY +=
-        childModel.marginTop + childBorderBoxHeight + childModel.marginBottom;
+
+      if (isRow) {
+        currentChildX +=
+          childModel.marginLeft + childBorderBoxWidth + childModel.marginRight;
+      } else if (isColumn) {
+        currentChildY +=
+          childModel.marginTop + childBorderBoxHeight + childModel.marginBottom;
+      } else {
+        // Block layout
+        currentChildY +=
+          childModel.marginTop + childBorderBoxHeight + childModel.marginBottom;
+      }
     }
   }
 

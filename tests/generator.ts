@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import puppeteer from "puppeteer";
+import puppeteer, { Browser } from "puppeteer";
 import { LayoutNode } from "../src/types";
 
 class RNG {
@@ -31,29 +31,17 @@ function genBoxSides(rng: RNG, max: number) {
 
 let idCounter = 1;
 
-function genNode(rng: RNG, depth: number): LayoutNode {
+function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
   const id = idCounter === 1 ? "root-node" : `node-${idCounter}`;
   idCounter++;
 
-  const width = rng.nextRange(50, 300);
-  const height = rng.nextRange(50, 300);
-
   const padding = genBoxSides(rng, 20);
   const margin = genBoxSides(rng, 20);
-  // Prevent sibling margin collapse for Tier 1 standard block layout
-  margin.bottom = 0;
-
   const border = genBoxSides(rng, 10);
-  // Ensure border > 0 or padding > 0 to prevent parent/child margin collapse
-  if (border.top === 0 && padding.top === 0) border.top = 1;
-  if (border.bottom === 0 && padding.bottom === 0) border.bottom = 1;
-
   const boxSizing = rng.nextChoice(["content-box", "border-box"] as const);
 
   const node: LayoutNode = {
     id,
-    width,
-    height,
     padding,
     margin,
     border,
@@ -62,10 +50,38 @@ function genNode(rng: RNG, depth: number): LayoutNode {
     children: [],
   };
 
+  if (tier === 1) {
+    node.width = rng.nextRange(50, 300);
+    node.height = rng.nextRange(50, 300);
+    // Prevent sibling margin collapse for Tier 1 standard block layout
+    node.margin.bottom = 0;
+    // Ensure border > 0 or padding > 0 to prevent parent/child margin collapse
+    if (node.border.top === 0 && node.padding.top === 0) node.border.top = 1;
+    if (node.border.bottom === 0 && node.padding.bottom === 0)
+      node.border.bottom = 1;
+  } else if (tier === 2) {
+    if (depth > 0) {
+      // Flex Container
+      node.display = "flex";
+      node.flexDirection = "row";
+      node.flexWrap = "nowrap";
+      // Definite main size
+      node.width = rng.nextRange(300, 800);
+      node.height = rng.nextRange(100, 300);
+    } else {
+      // Flex Item
+      node.height = rng.nextRange(50, 150);
+      node.flexGrow = rng.nextRange(0, 3);
+      node.flexShrink = 0;
+      node.flexBasis = rng.nextChoice([0, rng.nextRange(20, 100)]);
+      // width is undefined, let flex basis drive main size
+    }
+  }
+
   if (depth > 0) {
-    const numChildren = rng.nextRange(1, 3);
+    const numChildren = tier === 2 ? rng.nextRange(2, 5) : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
-      node.children.push(genNode(rng, depth - 1));
+      node.children.push(genNode(rng, depth - 1, tier));
     }
   }
 
@@ -73,9 +89,13 @@ function genNode(rng: RNG, depth: number): LayoutNode {
 }
 
 function toHTML(node: LayoutNode): string {
-  const styles = [
-    `width: ${node.width}px`,
-    `height: ${node.height}px`,
+  const styles: string[] = [
+    node.width !== undefined
+      ? `width: ${node.width}${typeof node.width === "number" ? "px" : ""}`
+      : "",
+    node.height !== undefined
+      ? `height: ${node.height}${typeof node.height === "number" ? "px" : ""}`
+      : "",
     `padding: ${node.padding.top}px ${node.padding.right}px ${node.padding.bottom}px ${node.padding.left}px`,
     `margin: ${node.margin.top}px ${node.margin.right}px ${node.margin.bottom}px ${node.margin.left}px`,
     `border-width: ${node.border.top}px ${node.border.right}px ${node.border.bottom}px ${node.border.left}px`,
@@ -83,31 +103,45 @@ function toHTML(node: LayoutNode): string {
     `border-color: black`,
     `box-sizing: ${node.boxSizing}`,
     `display: ${node.display}`,
-  ].join("; ");
+  ].filter(Boolean);
 
-  const childrenHtml = node.children.map(toHTML).join("\n");
-  return `<div id="${node.id}" style="${styles}">${childrenHtml}</div>`;
-}
-
-async function run() {
-  const fixturesDir = path.join(__dirname, "..", "fixtures");
-  if (!fs.existsSync(fixturesDir)) {
-    fs.mkdirSync(fixturesDir, { recursive: true });
+  if (node.display === "flex") {
+    if (node.flexDirection)
+      styles.push(`flex-direction: ${node.flexDirection}`);
+    if (node.flexWrap) styles.push(`flex-wrap: ${node.flexWrap}`);
   }
 
-  console.log("Launching Puppeteer...");
-  const browser = await puppeteer.launch({ headless: true });
+  if (node.flexGrow !== undefined) styles.push(`flex-grow: ${node.flexGrow}`);
+  if (node.flexShrink !== undefined)
+    styles.push(`flex-shrink: ${node.flexShrink}`);
+  if (node.flexBasis !== undefined) {
+    const basis =
+      typeof node.flexBasis === "number"
+        ? `${node.flexBasis}px`
+        : node.flexBasis;
+    styles.push(`flex-basis: ${basis}`);
+  }
+
+  const childrenHtml = node.children.map(toHTML).join("\n");
+  return `<div id="${node.id}" style="${styles.join("; ")}">${childrenHtml}</div>`;
+}
+
+async function generateFixtures(
+  browser: Browser,
+  tier: number,
+  count: number,
+  fixturesDir: string,
+) {
   const page = await browser.newPage();
   const version = await browser.version();
 
-  const NUM_FIXTURES = 50;
-  console.log(`Generating ${NUM_FIXTURES} fixtures for Tier 1...`);
+  console.log(`Generating ${count} fixtures for Tier ${tier}...`);
 
-  for (let i = 0; i < NUM_FIXTURES; i++) {
-    const seed = 10000 + i;
+  for (let i = 0; i < count; i++) {
+    const seed = tier * 10000 + i;
     const rng = new RNG(seed);
     idCounter = 1;
-    const tree = genNode(rng, 2); // Generate up to depth 2
+    const tree = genNode(rng, tier === 2 ? 1 : 2, tier); // Generate depth 1 for Tier 2, depth 2 for Tier 1
 
     // For test stability, position root container absolutely at 0,0
     // to avoid body margins affecting things (even though we reset them)
@@ -222,17 +256,52 @@ async function run() {
     });
 
     const fixture = {
-      tier: 1,
+      tier,
       seed,
-      description: `Tier 1 randomly generated fixture (seed ${seed})`,
+      description: `Tier ${tier} randomly generated fixture (seed ${seed})`,
       input: tree,
       expected,
       chromiumVersion: version,
       tolerance: 0.5,
     };
 
-    const filePath = path.join(fixturesDir, `tier-1-${seed}.json`);
+    const filePath = path.join(fixturesDir, `tier-${tier}-${seed}.json`);
     fs.writeFileSync(filePath, JSON.stringify(fixture, null, 2));
+  }
+
+  await page.close();
+}
+
+async function run() {
+  const fixturesDir = path.join(__dirname, "..", "fixtures");
+  if (!fs.existsSync(fixturesDir)) {
+    fs.mkdirSync(fixturesDir, { recursive: true });
+  }
+
+  console.log("Launching Puppeteer...");
+  const browser = await puppeteer.launch({ headless: true });
+
+  const args = process.argv.slice(2);
+  let tierArg = null;
+  let countArg = null;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--tier") tierArg = parseInt(args[++i], 10);
+    if (args[i] === "--count") countArg = parseInt(args[++i], 10);
+  }
+
+  const tasks = [];
+  if (tierArg) {
+    tasks.push({
+      tier: tierArg,
+      count: countArg || (tierArg === 1 ? 50 : 100),
+    });
+  } else {
+    tasks.push({ tier: 1, count: 50 });
+    tasks.push({ tier: 2, count: 100 });
+  }
+
+  for (const task of tasks) {
+    await generateFixtures(browser, task.tier, task.count, fixturesDir);
   }
 
   await browser.close();
