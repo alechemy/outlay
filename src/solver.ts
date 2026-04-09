@@ -1131,6 +1131,10 @@ export function solveLayout(
       (node.flexDirection === "row" ||
         node.flexDirection === "row-reverse" ||
         node.flexDirection === undefined);
+    const isMainReverse =
+      isFlex &&
+      (node.flexDirection === "row-reverse" ||
+        node.flexDirection === "column-reverse");
 
     if (isFlex) {
       const lineLayouts = containerLineLayouts.get(node.id) ?? [];
@@ -1242,8 +1246,20 @@ export function solveLayout(
           }
         }
 
+        // For reverse directions with negative remaining space,
+        // Chromium uses safe alignment for space-around/space-evenly:
+        // prevent overflow at main-end (fall back to flex-end behavior)
+        if (isMainReverse && remainingSpace < 0) {
+          const jc = node.justifyContent ?? "flex-start";
+          if (jc === "space-around" || jc === "space-evenly") {
+            mainAxisOffset = remainingSpace;
+          }
+        }
+
         // --- Position items in this line ---
-        let currentMainPos = mainAxisOffset;
+        let currentMainPos = isMainReverse
+          ? containerMainSize - mainAxisOffset
+          : mainAxisOffset;
 
         for (const child of lineItems) {
           const childModel = boxModelMap.get(child.id)!;
@@ -1361,31 +1377,56 @@ export function solveLayout(
             }
           }
 
-          const mainMarginStart = isRow
-            ? childModel.marginLeft
-            : childModel.marginTop;
-          const mainMarginEnd = isRow
-            ? childModel.marginRight
-            : childModel.marginBottom;
           const mainBorderBox = isRow
             ? childBorderBoxWidth
             : childBorderBoxHeight;
 
+          let mainMarginStart: number;
+          let mainMarginEnd: number;
+          if (isMainReverse) {
+            mainMarginStart = isRow
+              ? childModel.marginRight
+              : childModel.marginBottom;
+            mainMarginEnd = isRow
+              ? childModel.marginLeft
+              : childModel.marginTop;
+          } else {
+            mainMarginStart = isRow
+              ? childModel.marginLeft
+              : childModel.marginTop;
+            mainMarginEnd = isRow
+              ? childModel.marginRight
+              : childModel.marginBottom;
+          }
+
           let childBorderBoxX: number;
           let childBorderBoxY: number;
 
-          if (isRow) {
-            childBorderBoxX = contentBoxX + currentMainPos + mainMarginStart;
-            childBorderBoxY =
-              contentBoxY + lineLayout.crossOffset + itemCrossOffset;
+          if (isMainReverse) {
+            currentMainPos -= mainMarginStart + mainBorderBox;
+            if (isRow) {
+              childBorderBoxX = contentBoxX + currentMainPos;
+              childBorderBoxY =
+                contentBoxY + lineLayout.crossOffset + itemCrossOffset;
+            } else {
+              childBorderBoxX =
+                contentBoxX + lineLayout.crossOffset + itemCrossOffset;
+              childBorderBoxY = contentBoxY + currentMainPos;
+            }
+            currentMainPos -= mainMarginEnd + interItemGap;
           } else {
-            childBorderBoxX =
-              contentBoxX + lineLayout.crossOffset + itemCrossOffset;
-            childBorderBoxY = contentBoxY + currentMainPos + mainMarginStart;
+            if (isRow) {
+              childBorderBoxX = contentBoxX + currentMainPos + mainMarginStart;
+              childBorderBoxY =
+                contentBoxY + lineLayout.crossOffset + itemCrossOffset;
+            } else {
+              childBorderBoxX =
+                contentBoxX + lineLayout.crossOffset + itemCrossOffset;
+              childBorderBoxY = contentBoxY + currentMainPos + mainMarginStart;
+            }
+            currentMainPos +=
+              mainMarginStart + mainBorderBox + mainMarginEnd + interItemGap;
           }
-
-          currentMainPos +=
-            mainMarginStart + mainBorderBox + mainMarginEnd + interItemGap;
 
           emitBoxes(child, childBorderBoxX, childBorderBoxY);
         }

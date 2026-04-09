@@ -283,6 +283,75 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         node.flexBasis = rng.nextChoice([0, rng.nextRange(20, 100)]);
       }
     }
+  } else if (tier === 9) {
+    if (depth > 0) {
+      // Flex Container with reverse direction
+      node.display = "flex";
+      node.flexDirection = rng.nextChoice([
+        "row-reverse",
+        "row-reverse",
+        "column-reverse",
+        "column-reverse",
+        "row",
+        "column",
+      ] as const);
+      node.flexWrap = rng.nextChoice([
+        "nowrap",
+        "nowrap",
+        "nowrap",
+        "wrap",
+        "wrap-reverse",
+      ] as const);
+      node.width = rng.nextRange(200, 600);
+      node.height = rng.nextRange(200, 500);
+      node.justifyContent = rng.nextChoice([
+        "flex-start",
+        "flex-end",
+        "center",
+        "space-between",
+        "space-around",
+        "space-evenly",
+      ] as const);
+      if (rng.next() < 0.5) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+      if (node.flexWrap !== "nowrap" && rng.next() < 0.5) {
+        node.alignContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+          "space-between",
+          "space-around",
+        ] as const);
+      }
+    } else {
+      // Flex Item with order property
+      node.width = rng.nextRange(30, 150);
+      node.height = rng.nextRange(30, 120);
+      node.flexGrow = rng.nextChoice([0, 0, 1, 2]);
+      node.flexShrink = rng.nextChoice([0, 1, 1]);
+      if (rng.next() < 0.4) {
+        node.flexBasis = rng.nextRange(20, 100);
+      }
+      // ~60% chance of order property
+      if (rng.next() < 0.6) {
+        node.order = rng.nextRange(-2, 5);
+      }
+      if (rng.next() < 0.3) {
+        node.alignSelf = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -386,9 +455,11 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
           : rng.nextRange(2, 4)
         : tier === 6
           ? rng.nextRange(4, 8)
-          : tier >= 2 && tier <= 5
-            ? rng.nextRange(2, 5)
-            : rng.nextRange(1, 3);
+          : tier === 9
+            ? rng.nextRange(3, 6)
+            : tier >= 2 && tier <= 5
+              ? rng.nextRange(2, 5)
+              : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
       node.children.push(genNode(rng, depth - 1, tier));
     }
@@ -437,6 +508,7 @@ function toHTML(node: LayoutNode): string {
         : node.flexBasis;
     styles.push(`flex-basis: ${basis}`);
   }
+  if (node.order !== undefined) styles.push(`order: ${node.order}`);
   if (node.minWidth !== undefined) styles.push(`min-width: ${node.minWidth}px`);
   if (node.maxWidth !== undefined) styles.push(`max-width: ${node.maxWidth}px`);
   if (node.minHeight !== undefined)
@@ -469,7 +541,7 @@ async function generateFixtures(
     idCounter = 1;
     const tree = genNode(
       rng,
-      (tier >= 2 && tier <= 6) || tier === 8 ? 1 : 2,
+      (tier >= 2 && tier <= 6) || tier === 8 || tier === 9 ? 1 : 2,
       tier,
     );
 
