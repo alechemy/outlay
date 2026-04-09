@@ -205,45 +205,30 @@ export function solveLayout(
         trace.flexLines.push(...lines);
       }
 
-      // Phase 5: Resolve flexible lengths
+      // Phase 5: Resolve flexible lengths (W3C CSS Flexbox spec 9.7)
+      // Internal calculations use content-box sizes.
       for (const line of lines) {
-        let totalMainSize = 0;
-        let totalFlexGrow = 0;
+        interface FlexItemInfo {
+          id: string;
+          flexBaseSize: number;
+          hypoMainSize: number;
+          paddingBorder: number;
+          marginMain: number;
+          flexGrow: number;
+          flexShrink: number;
+          minContent: number;
+          maxContent: number;
+          frozen: boolean;
+          targetMainSize: number;
+        }
 
+        const items: FlexItemInfo[] = [];
         for (const childId of line.itemIds) {
           const child = nodeMap.get(childId)!;
           const childModel = boxModelMap.get(childId)!;
-          const hypoMainSize =
-            trace?.hypotheticalMainSizes.get(childId) ??
-            determineHypotheticalMainSize(child, childModel, isRow);
           const marginMain = isRow
             ? childModel.marginLeft + childModel.marginRight
             : childModel.marginTop + childModel.marginBottom;
-          totalMainSize += hypoMainSize + marginMain;
-          totalFlexGrow += child.flexGrow ?? 0;
-        }
-
-        const freeSpace = availableMainSize - totalMainSize;
-
-        for (const childId of line.itemIds) {
-          const child = nodeMap.get(childId)!;
-          const childModel = boxModelMap.get(childId)!;
-          const hypoMainSize =
-            trace?.hypotheticalMainSizes.get(childId) ??
-            determineHypotheticalMainSize(child, childModel, isRow);
-
-          let targetMainSize = hypoMainSize;
-
-          if (freeSpace > 0 && totalFlexGrow > 0) {
-            const flexGrow = child.flexGrow ?? 0;
-            targetMainSize += (flexGrow / totalFlexGrow) * freeSpace;
-          }
-
-          if (trace) {
-            trace.resolvedMainSizes.set(childId, targetMainSize);
-            trace.frozenItems.set(childId, "flexible");
-          }
-
           const paddingBorder = isRow
             ? childModel.paddingLeft +
               childModel.paddingRight +
@@ -254,16 +239,215 @@ export function solveLayout(
               childModel.borderTop +
               childModel.borderBottom;
 
-          if (isRow) {
-            childModel.contentWidth = Math.max(
-              0,
-              targetMainSize - paddingBorder,
-            );
+          // Content-box flex base size (spec 9.2 step 3)
+          let flexBaseSize: number;
+          if (typeof child.flexBasis === "number") {
+            flexBaseSize =
+              child.boxSizing === "border-box"
+                ? Math.max(0, child.flexBasis - paddingBorder)
+                : child.flexBasis;
           } else {
-            childModel.contentHeight = Math.max(
+            flexBaseSize = isRow
+              ? childModel.contentWidth
+              : childModel.contentHeight;
+          }
+
+          // Min/max in content-box terms
+          let minContent = 0;
+          let maxContent = Infinity;
+          if (isRow) {
+            if (child.minWidth !== undefined) {
+              minContent =
+                child.boxSizing === "border-box"
+                  ? Math.max(0, child.minWidth - paddingBorder)
+                  : child.minWidth;
+            }
+            if (child.maxWidth !== undefined) {
+              maxContent =
+                child.boxSizing === "border-box"
+                  ? Math.max(0, child.maxWidth - paddingBorder)
+                  : child.maxWidth;
+            }
+          } else {
+            if (child.minHeight !== undefined) {
+              minContent =
+                child.boxSizing === "border-box"
+                  ? Math.max(0, child.minHeight - paddingBorder)
+                  : child.minHeight;
+            }
+            if (child.maxHeight !== undefined) {
+              maxContent =
+                child.boxSizing === "border-box"
+                  ? Math.max(0, child.maxHeight - paddingBorder)
+                  : child.maxHeight;
+            }
+          }
+          if (maxContent < minContent) maxContent = minContent;
+
+          // Hypothetical main size = clamped flex base size (spec 9.3 step 4)
+          const hypoMainSize = Math.max(
+            minContent,
+            Math.min(maxContent, flexBaseSize),
+          );
+
+          items.push({
+            id: childId,
+            flexBaseSize,
+            hypoMainSize,
+            paddingBorder,
+            marginMain,
+            flexGrow: child.flexGrow ?? 0,
+            flexShrink: child.flexShrink ?? 1,
+            minContent,
+            maxContent,
+            frozen: false,
+            targetMainSize: hypoMainSize,
+          });
+        }
+
+        // Step 1: Grow vs shrink
+        let totalOuterHypo = 0;
+        for (const item of items) {
+          totalOuterHypo +=
+            item.hypoMainSize + item.paddingBorder + item.marginMain;
+        }
+        const growing = totalOuterHypo < availableMainSize;
+
+        // Step 2: Size inflexible items
+        for (const item of items) {
+          const flexFactor = growing ? item.flexGrow : item.flexShrink;
+          if (flexFactor === 0) {
+            item.targetMainSize = item.hypoMainSize;
+            item.frozen = true;
+          } else if (growing && item.flexBaseSize > item.hypoMainSize) {
+            item.targetMainSize = item.hypoMainSize;
+            item.frozen = true;
+          } else if (!growing && item.flexBaseSize < item.hypoMainSize) {
+            item.targetMainSize = item.hypoMainSize;
+            item.frozen = true;
+          }
+        }
+
+        // Step 4: Iterative clamping-and-refreeze loop
+        for (let iter = 0; iter < 100; iter++) {
+          const unfrozen = items.filter((it) => !it.frozen);
+          if (unfrozen.length === 0) break;
+
+          let remainingFreeSpace = availableMainSize;
+          for (const item of items) {
+            if (item.frozen) {
+              remainingFreeSpace -=
+                item.targetMainSize + item.paddingBorder + item.marginMain;
+            } else {
+              remainingFreeSpace -=
+                item.flexBaseSize + item.paddingBorder + item.marginMain;
+            }
+          }
+
+          let totalFlexFactor = 0;
+          for (const item of unfrozen) {
+            totalFlexFactor += growing ? item.flexGrow : item.flexShrink;
+          }
+
+          if (totalFlexFactor === 0) {
+            for (const item of unfrozen) {
+              item.targetMainSize = Math.max(
+                item.minContent,
+                Math.min(item.maxContent, item.flexBaseSize),
+              );
+              item.frozen = true;
+            }
+            break;
+          }
+
+          if (growing) {
+            for (const item of unfrozen) {
+              item.targetMainSize =
+                item.flexBaseSize +
+                (item.flexGrow / totalFlexFactor) * remainingFreeSpace;
+            }
+          } else {
+            let totalScaledShrink = 0;
+            for (const item of unfrozen) {
+              totalScaledShrink += item.flexShrink * item.flexBaseSize;
+            }
+            for (const item of unfrozen) {
+              if (totalScaledShrink > 0) {
+                const ratio =
+                  (item.flexShrink * item.flexBaseSize) / totalScaledShrink;
+                item.targetMainSize =
+                  item.flexBaseSize + ratio * remainingFreeSpace;
+              } else {
+                item.targetMainSize = item.flexBaseSize;
+              }
+            }
+          }
+
+          // Spec 9.7 step 4d-e: clamp, then freeze only one violation direction
+          const adjustments: { item: FlexItemInfo; adj: number }[] = [];
+          for (const item of unfrozen) {
+            const unclamped = item.targetMainSize;
+            const clamped = Math.max(
               0,
-              targetMainSize - paddingBorder,
+              Math.max(item.minContent, Math.min(item.maxContent, unclamped)),
             );
+            const adj = clamped - unclamped;
+            adjustments.push({ item, adj });
+            item.targetMainSize = clamped;
+          }
+
+          const totalAdj = adjustments.reduce((s, a) => s + a.adj, 0);
+          let anyFrozen = false;
+
+          if (totalAdj === 0) {
+            // No violations at all
+            break;
+          } else if (totalAdj > 0) {
+            // Net min violations: freeze only min-violation items
+            for (const { item, adj } of adjustments) {
+              if (adj > 0) {
+                item.frozen = true;
+                anyFrozen = true;
+              }
+            }
+          } else {
+            // Net max violations: freeze only max-violation items
+            for (const { item, adj } of adjustments) {
+              if (adj < 0) {
+                item.frozen = true;
+                anyFrozen = true;
+              }
+            }
+          }
+
+          if (!anyFrozen) break;
+        }
+
+        // Apply resolved content-box sizes
+        for (const item of items) {
+          const childModel = boxModelMap.get(item.id)!;
+
+          if (trace) {
+            trace.resolvedMainSizes.set(
+              item.id,
+              item.targetMainSize + item.paddingBorder,
+            );
+            trace.frozenItems.set(
+              item.id,
+              item.targetMainSize <= item.minContent + 0.01 &&
+                item.minContent > 0
+                ? "min-clamped"
+                : item.targetMainSize >= item.maxContent - 0.01 &&
+                    item.maxContent < Infinity
+                  ? "max-clamped"
+                  : "flexible",
+            );
+          }
+
+          if (isRow) {
+            childModel.contentWidth = Math.max(0, item.targetMainSize);
+          } else {
+            childModel.contentHeight = Math.max(0, item.targetMainSize);
           }
         }
       }

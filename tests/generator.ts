@@ -76,10 +76,34 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
       node.flexBasis = rng.nextChoice([0, rng.nextRange(20, 100)]);
       // width is undefined, let flex basis drive main size
     }
+  } else if (tier === 3) {
+    if (depth > 0) {
+      // Flex Container — deliberately small so items overflow and trigger shrink
+      node.display = "flex";
+      node.flexDirection = "row";
+      node.flexWrap = "nowrap";
+      node.width = rng.nextRange(200, 500);
+      node.height = rng.nextRange(100, 300);
+    } else {
+      // Flex Item with shrink + min/max constraints
+      node.height = rng.nextRange(50, 150);
+      node.flexGrow = rng.nextRange(0, 2);
+      node.flexShrink = rng.nextChoice([0, 1, 1, 2, 3]); // bias toward non-zero shrink
+      // Large basis to create overflow
+      node.flexBasis = rng.nextRange(80, 250);
+      // Add min/max constraints with ~50% probability each
+      if (rng.next() < 0.5) {
+        node.minWidth = rng.nextRange(20, 120);
+      }
+      if (rng.next() < 0.5) {
+        node.maxWidth = rng.nextRange(100, 350);
+      }
+    }
   }
 
   if (depth > 0) {
-    const numChildren = tier === 2 ? rng.nextRange(2, 5) : rng.nextRange(1, 3);
+    const numChildren =
+      tier === 2 || tier === 3 ? rng.nextRange(2, 5) : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
       node.children.push(genNode(rng, depth - 1, tier));
     }
@@ -121,6 +145,8 @@ function toHTML(node: LayoutNode): string {
         : node.flexBasis;
     styles.push(`flex-basis: ${basis}`);
   }
+  if (node.minWidth !== undefined) styles.push(`min-width: ${node.minWidth}px`);
+  if (node.maxWidth !== undefined) styles.push(`max-width: ${node.maxWidth}px`);
 
   const childrenHtml = node.children.map(toHTML).join("\n");
   return `<div id="${node.id}" style="${styles.join("; ")}">${childrenHtml}</div>`;
@@ -141,7 +167,7 @@ async function generateFixtures(
     const seed = tier * 10000 + i;
     const rng = new RNG(seed);
     idCounter = 1;
-    const tree = genNode(rng, tier === 2 ? 1 : 2, tier); // Generate depth 1 for Tier 2, depth 2 for Tier 1
+    const tree = genNode(rng, tier === 2 || tier === 3 ? 1 : 2, tier);
 
     // For test stability, position root container absolutely at 0,0
     // to avoid body margins affecting things (even though we reset them)
@@ -298,6 +324,7 @@ async function run() {
   } else {
     tasks.push({ tier: 1, count: 50 });
     tasks.push({ tier: 2, count: 100 });
+    tasks.push({ tier: 3, count: 150 });
   }
 
   for (const task of tasks) {
