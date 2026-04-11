@@ -269,7 +269,11 @@ function computeIntrinsicContentSize(
         (dimension === "width" || typeof child[dimProp] !== "number")
       ) {
         if (maxContentMain > 0) {
-          contentSize = Math.max(flexBase, maxContentMain);
+          if (mode === "min-content" && (child.flexShrink ?? 1) > 0 && dimension === "width") {
+            contentSize = maxContentMain;
+          } else {
+            contentSize = Math.max(flexBase, maxContentMain);
+          }
         } else if (dimension === "height" || (child.flexShrink ?? 1) === 0) {
           // Height dimension: items stay at flex-base in indefinite container
           // Width dimension with no shrink: flex-base is hard minimum
@@ -304,6 +308,13 @@ function computeIntrinsicContentSize(
             child, dimension, nodeMap, boxModelMap, "min-content"
           );
           contentSize = Math.max(flexBase, Math.min(specifiedContent, recursiveMinContent));
+        } else if (!hasExplicitMainDim && (child.flexShrink ?? 1) === 0 && child.display === "flex") {
+          // Non-shrinkable flex item with no explicit main size: min-width:auto
+          // applies — the item can't shrink below its min-content size.
+          const recursiveMinContent = computeIntrinsicContentSize(
+            child, dimension, nodeMap, boxModelMap, "min-content"
+          );
+          contentSize = Math.max(flexBase, recursiveMinContent);
         } else {
           contentSize = flexBase;
         }
