@@ -2,9 +2,15 @@
 
 ## Current Status
 
-Infrastructure is complete. Tiers 1–9 are fully passing (100%). Active work is on **Tier 10** (edge cases and adversarial inputs).
+Tiers 1–11 are fully passing (100%, 1275/1275). Active work is on **Tier 12** (position:fixed, nested absolute positioning).
 
-Do not re-run the Bootstrap Sequence — all infrastructure (fixture runner, generator, regression lock, probe tool, fitness tracker) is already built.
+Performance targets are all met:
+
+- 100 nodes / 2 levels: ~0.06ms (target <1ms)
+- 1,000 nodes / 3 levels: ~1.1ms (target <5ms)
+- 10,000 nodes / 5 levels: ~14ms (target <50ms)
+
+Run `npm run bench` to check performance. All other infrastructure (fixture runner, generator, regression lock, probe) is built.
 
 ---
 

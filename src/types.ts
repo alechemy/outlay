@@ -92,6 +92,13 @@ export interface LayoutNode {
   };
   gridRow?: { start: number | "auto"; end: number | "auto" | `span ${number}` };
 
+  // Positioning
+  position?: "static" | "relative" | "absolute" | "fixed";
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+
   // Children
   children: LayoutNode[];
 

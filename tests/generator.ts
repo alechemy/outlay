@@ -494,6 +494,84 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         }
       }
     }
+  } else if (tier === 11) {
+    if (depth > 0) {
+      // Flex container that acts as containing block for absolute children.
+      // Root has position:absolute from the CSS rule, so no position property
+      // needed on the input node — the solver treats root as always a CB.
+      node.display = "flex";
+      node.flexDirection = rng.nextChoice(["row", "column", "row", "row"] as const);
+      node.flexWrap = "nowrap";
+      node.width = rng.nextRange(300, 700);
+      node.height = rng.nextRange(200, 500);
+      if (rng.next() < 0.5) {
+        node.justifyContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+        ] as const);
+      }
+      if (rng.next() < 0.4) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+    } else {
+      // Child: either a normal flex item or an absolutely-positioned element
+      const isAbsolute = rng.next() < 0.4;
+      if (isAbsolute) {
+        node.position = "absolute";
+        // Keep box model simple for abs children
+        node.padding = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.margin = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.border = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.boxSizing = "border-box";
+
+        const strategy = rng.nextRange(0, 3);
+        if (strategy === 0) {
+          // left + top, explicit size
+          node.left = rng.nextRange(0, 100);
+          node.top = rng.nextRange(0, 100);
+          node.width = rng.nextRange(50, 150);
+          node.height = rng.nextRange(50, 150);
+        } else if (strategy === 1) {
+          // right + bottom, explicit size
+          node.right = rng.nextRange(0, 100);
+          node.bottom = rng.nextRange(0, 100);
+          node.width = rng.nextRange(50, 150);
+          node.height = rng.nextRange(50, 150);
+        } else if (strategy === 2) {
+          // all 4 insets — width/height determined by stretch
+          node.left = rng.nextRange(10, 80);
+          node.right = rng.nextRange(10, 80);
+          node.top = rng.nextRange(10, 80);
+          node.bottom = rng.nextRange(10, 80);
+        } else {
+          // two insets in one axis, one in the other + explicit size
+          if (rng.next() < 0.5) {
+            node.left = rng.nextRange(10, 60);
+            node.right = rng.nextRange(10, 60);
+            node.top = rng.nextRange(10, 60);
+            node.height = rng.nextRange(50, 150);
+          } else {
+            node.top = rng.nextRange(10, 60);
+            node.bottom = rng.nextRange(10, 60);
+            node.left = rng.nextRange(10, 60);
+            node.width = rng.nextRange(50, 150);
+          }
+        }
+      } else {
+        // Normal flex item
+        node.width = rng.nextRange(30, 150);
+        node.height = rng.nextRange(30, 120);
+        node.flexGrow = rng.nextChoice([0, 0, 1]);
+        node.flexShrink = rng.nextChoice([0, 1]);
+        if (rng.next() < 0.3) node.flexBasis = rng.nextRange(20, 100);
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -603,9 +681,11 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
               ? tier10Config.category === 1
                 ? rng.nextRange(1, 2) // deep nesting: 1-2 per level
                 : rng.nextRange(3, 6) // other categories: 3-6 items
-              : tier >= 2 && tier <= 5
-                ? rng.nextRange(2, 5)
-                : rng.nextRange(1, 3);
+              : tier === 11
+                ? rng.nextRange(3, 6) // mix of in-flow and absolute children
+                : tier >= 2 && tier <= 5
+                  ? rng.nextRange(2, 5)
+                  : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
       node.children.push(genNode(rng, depth - 1, tier));
     }
@@ -661,6 +741,12 @@ function toHTML(node: LayoutNode): string {
     styles.push(`min-height: ${node.minHeight}px`);
   if (node.maxHeight !== undefined)
     styles.push(`max-height: ${node.maxHeight}px`);
+  if (node.position && node.position !== "static")
+    styles.push(`position: ${node.position}`);
+  if (node.top !== undefined) styles.push(`top: ${node.top}px`);
+  if (node.right !== undefined) styles.push(`right: ${node.right}px`);
+  if (node.bottom !== undefined) styles.push(`bottom: ${node.bottom}px`);
+  if (node.left !== undefined) styles.push(`left: ${node.left}px`);
 
   let childrenHtml = node.children.map(toHTML).join("\n");
   // For content items, inject a fixed-size span as intrinsic content
@@ -697,7 +783,7 @@ async function generateFixtures(
         ? 2
         : tier === 10
           ? tier10Config.maxDepth
-          : (tier >= 2 && tier <= 6) || tier === 8 || tier === 9
+          : (tier >= 2 && tier <= 6) || tier === 8 || tier === 9 || tier === 11
             ? 1
             : 2;
 

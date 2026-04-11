@@ -57,6 +57,11 @@ function toHTML(node: any): string {
     node.maxWidth !== undefined && `max-width: ${node.maxWidth}px`,
     node.minHeight !== undefined && `min-height: ${node.minHeight}px`,
     node.maxHeight !== undefined && `max-height: ${node.maxHeight}px`,
+    node.position && node.position !== "static" && `position: ${node.position}`,
+    node.top !== undefined && `top: ${node.top}px`,
+    node.right !== undefined && `right: ${node.right}px`,
+    node.bottom !== undefined && `bottom: ${node.bottom}px`,
+    node.left !== undefined && `left: ${node.left}px`,
   ].filter(Boolean);
 
   const children = (node.children ?? []).map(toHTML).join("\n");

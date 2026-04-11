@@ -7,7 +7,8 @@
     "test": "ts-node tests/runner.ts",
     "test:trace": "ts-node tests/trace-comparator.test.ts",
     "generate": "ts-node tests/generator.ts",
-    "probe": "ts-node scripts/probe-chromium.ts"
+    "probe": "ts-node scripts/probe-chromium.ts",
+    "bench": "ts-node scripts/benchmark.ts"
   },
   "keywords": [],
   "author": "",

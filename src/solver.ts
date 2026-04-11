@@ -69,7 +69,12 @@ function resolveBoxModel(node: LayoutNode): ResolvedBoxModel {
 
 function collectFlexItems(node: LayoutNode): string[] {
   return node.children
-    .filter((child) => child.display !== "none")
+    .filter((child) => {
+      if (child.display === "none") return false;
+      const pos = child.position ?? "static";
+      if (pos === "absolute" || pos === "fixed") return false;
+      return true;
+    })
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .map((child) => child.id);
 }
@@ -390,6 +395,14 @@ export function solveLayout(
   }
   const containerLineLayouts = new Map<string, LineLayout[]>();
   const parentResolvedDims = new Map<string, Set<"width" | "height">>();
+
+  interface ContainingBlockInfo {
+    paddingBoxX: number;
+    paddingBoxY: number;
+    paddingBoxWidth: number;
+    paddingBoxHeight: number;
+  }
+  let rootContainingBlock: ContainingBlockInfo;
 
   // Phase 1: Resolve box models for all nodes
   function resolveAllBoxModels(node: LayoutNode) {
@@ -1101,13 +1114,108 @@ export function solveLayout(
     }
 
     for (const child of node.children) {
+      const pos = child.position ?? "static";
+      if (pos === "absolute" || pos === "fixed") continue;
       processNode(child);
     }
   }
   processNode(root);
 
   // Phase 7: Produce final boxes
-  function emitBoxes(node: LayoutNode, borderBoxX: number, borderBoxY: number) {
+  function resolveAndEmitAbsolute(child: LayoutNode, cb: ContainingBlockInfo) {
+    const childModel = boxModelMap.get(child.id)!;
+
+    const mL = child.margin.left === "auto" ? 0 : (child.margin.left as number);
+    const mR = child.margin.right === "auto" ? 0 : (child.margin.right as number);
+    const mT = child.margin.top === "auto" ? 0 : (child.margin.top as number);
+    const mB = child.margin.bottom === "auto" ? 0 : (child.margin.bottom as number);
+    childModel.marginLeft = mL;
+    childModel.marginRight = mR;
+    childModel.marginTop = mT;
+    childModel.marginBottom = mB;
+
+    const horizPB =
+      childModel.paddingLeft +
+      childModel.paddingRight +
+      childModel.borderLeft +
+      childModel.borderRight;
+    const vertPB =
+      childModel.paddingTop +
+      childModel.paddingBottom +
+      childModel.borderTop +
+      childModel.borderBottom;
+
+    const hasLeft = child.left !== undefined;
+    const hasRight = child.right !== undefined;
+    const hasTop = child.top !== undefined;
+    const hasBottom = child.bottom !== undefined;
+
+    // Resolve content width
+    if (hasLeft && hasRight) {
+      childModel.contentWidth = Math.max(
+        0,
+        cb.paddingBoxWidth - child.left! - child.right! - mL - mR - horizPB,
+      );
+    } else if (typeof child.width !== "number") {
+      childModel.contentWidth = computeIntrinsicContentSize(
+        child,
+        "width",
+        nodeMap,
+        boxModelMap,
+        "max-content",
+      );
+    }
+    // else: contentWidth already set from resolveBoxModel
+
+    // Resolve content height
+    if (hasTop && hasBottom) {
+      childModel.contentHeight = Math.max(
+        0,
+        cb.paddingBoxHeight - child.top! - child.bottom! - mT - mB - vertPB,
+      );
+    }
+    // else: contentHeight already set from resolveBoxModel (or 0 for auto)
+
+    // Mark dimensions as resolved so processNode doesn't override
+    parentResolvedDims.set(child.id, new Set(["width", "height"]));
+
+    // Process the absolute child's internal layout now that its size is known
+    processNode(child);
+
+    const childBorderBoxWidth = childModel.contentWidth + horizPB;
+    const childBorderBoxHeight = childModel.contentHeight + vertPB;
+
+    // Compute X position
+    let childBorderBoxX: number;
+    if (hasLeft) {
+      childBorderBoxX = cb.paddingBoxX + child.left! + mL;
+    } else if (hasRight) {
+      childBorderBoxX =
+        cb.paddingBoxX + cb.paddingBoxWidth - child.right! - mR - childBorderBoxWidth;
+    } else {
+      childBorderBoxX = cb.paddingBoxX + mL;
+    }
+
+    // Compute Y position
+    let childBorderBoxY: number;
+    if (hasTop) {
+      childBorderBoxY = cb.paddingBoxY + child.top! + mT;
+    } else if (hasBottom) {
+      childBorderBoxY =
+        cb.paddingBoxY + cb.paddingBoxHeight - child.bottom! - mB - childBorderBoxHeight;
+    } else {
+      childBorderBoxY = cb.paddingBoxY + mT;
+    }
+
+    emitBoxes(child, childBorderBoxX, childBorderBoxY, cb);
+  }
+
+  function emitBoxes(
+    node: LayoutNode,
+    borderBoxX: number,
+    borderBoxY: number,
+    inheritedCB: ContainingBlockInfo,
+  ) {
     const model = boxModelMap.get(node.id)!;
     const borderBoxWidth =
       model.contentWidth +
@@ -1159,6 +1267,20 @@ export function solveLayout(
 
     const contentBoxX = borderBoxX + model.borderLeft + model.paddingLeft;
     const contentBoxY = borderBoxY + model.borderTop + model.paddingTop;
+
+    // Determine containing block for this node's absolutely-positioned children
+    const nodePosition = node.position ?? "static";
+    const isPositioned = nodePosition !== "static";
+    const myCB: ContainingBlockInfo = isPositioned
+      ? {
+          paddingBoxX: borderBoxX + model.borderLeft,
+          paddingBoxY: borderBoxY + model.borderTop,
+          paddingBoxWidth:
+            model.contentWidth + model.paddingLeft + model.paddingRight,
+          paddingBoxHeight:
+            model.contentHeight + model.paddingTop + model.paddingBottom,
+        }
+      : inheritedCB;
 
     const isFlex = node.display === "flex";
     const isRow =
@@ -1461,7 +1583,7 @@ export function solveLayout(
               mainMarginStart + mainBorderBox + mainMarginEnd + interItemGap;
           }
 
-          emitBoxes(child, childBorderBoxX, childBorderBoxY);
+          emitBoxes(child, childBorderBoxX, childBorderBoxY, myCB);
         }
       }
     } else {
@@ -1469,6 +1591,8 @@ export function solveLayout(
       let currentMainPos = 0;
       for (const child of node.children) {
         if (child.display === "none") continue;
+        const childPos = child.position ?? "static";
+        if (childPos === "absolute" || childPos === "fixed") continue;
 
         const childModel = boxModelMap.get(child.id)!;
         const childBorderBoxHeight =
@@ -1484,15 +1608,35 @@ export function solveLayout(
         currentMainPos +=
           childModel.marginTop + childBorderBoxHeight + childModel.marginBottom;
 
-        emitBoxes(child, childBorderBoxX, childBorderBoxY);
+        emitBoxes(child, childBorderBoxX, childBorderBoxY, myCB);
       }
+    }
+
+    // Resolve absolutely/fixed-positioned children after in-flow layout
+    for (const child of node.children) {
+      if (child.display === "none") continue;
+      const childPos = child.position ?? "static";
+      if (childPos !== "absolute" && childPos !== "fixed") continue;
+      const cb = childPos === "fixed" ? rootContainingBlock : myCB;
+      resolveAndEmitAbsolute(child, cb);
     }
   }
 
   const rootModel = boxModelMap.get(root.id)!;
   const rootBorderBoxX = -(rootModel.borderLeft + rootModel.paddingLeft);
   const rootBorderBoxY = -(rootModel.borderTop + rootModel.paddingTop);
-  emitBoxes(root, rootBorderBoxX, rootBorderBoxY);
+
+  // Root is always a containing block (acts as the viewport in off-DOM context)
+  rootContainingBlock = {
+    paddingBoxX: rootBorderBoxX + rootModel.borderLeft,
+    paddingBoxY: rootBorderBoxY + rootModel.borderTop,
+    paddingBoxWidth:
+      rootModel.contentWidth + rootModel.paddingLeft + rootModel.paddingRight,
+    paddingBoxHeight:
+      rootModel.contentHeight + rootModel.paddingTop + rootModel.paddingBottom,
+  };
+
+  emitBoxes(root, rootBorderBoxX, rootBorderBoxY, rootContainingBlock);
 
   if (trace) {
     result.trace = trace;
