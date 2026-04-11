@@ -6,8 +6,6 @@ Build a JavaScript/WebAssembly library that answers the question "given these CS
 
 This is the layout equivalent of what Pretext.js does for text measurement: extracting a historically DOM-dependent computation into a standalone, renderable-anywhere math layer.
 
-The development methodology is designed for agent-driven iterative refinement. An agent should be able to take this document and autonomously work through a structured progression of increasingly difficult layout problems, using automated test generation and a continuous fitness metric to guide its own improvement loop over days or weeks of iteration.
-
 ---
 
 ## Problem Statement
@@ -206,9 +204,7 @@ These are median times on a 2022-era laptop (Apple M1 or equivalent x86). Measur
 
 ### Modular Sub-Algorithm Design
 
-The flexbox layout algorithm is specified by the W3C as a series of numbered steps (https://www.w3.org/TR/css-flexbox-1/#layout-algorithm). Each major step must be implemented as a separate, independently testable module. This is critical for agent-driven refinement: the agent must be able to identify which sub-algorithm is producing errors and refine it in isolation.
-
-The required modules, mapped to spec sections:
+The flexbox layout algorithm is specified by the W3C as a series of numbered steps. Each major step is implemented as a separate, independently testable module. This makes it possible to identify which sub-algorithm is producing errors and refine it in isolation.
 
 | Module                       | Spec Section         | Responsibility                                                                                                    |
 | ---------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -223,13 +219,27 @@ The required modules, mapped to spec sections:
 | `crossAxisAlignment`         | 9.6                  | Apply `align-items`, `align-self`, `align-content`                                                                |
 | `resolveAbsolutePositions`   | Phase 2              | Handle `position: absolute/fixed` children                                                                        |
 
-Each module has:
+Each module has a clear contract: input type, output type, and what properties it reads vs. modifies.
 
-- Its own unit test suite with targeted inputs and expected outputs.
-- Its own micro-benchmark.
-- A clear contract: input type, output type, and what properties it reads vs. modifies.
+### Debug Trace
 
-When the agent encounters a failing end-to-end test, it should trace the error to a specific module by logging intermediate results at module boundaries and comparing them to expected intermediate values.
+The solver exposes a debug mode that logs output at every module boundary, enabling failures to be traced to a specific sub-algorithm:
+
+```typescript
+interface DebugTrace {
+  resolvedBoxModels: Map<
+    string,
+    { contentWidth: number; contentHeight: number /* ... */ }
+  >;
+  flexItemOrder: string[];
+  hypotheticalMainSizes: Map<string, number>;
+  flexLines: Array<{ itemIds: string[]; mainSize: number }>;
+  resolvedMainSizes: Map<string, number>;
+  frozenItems: Map<string, "min-clamped" | "max-clamped" | "flexible">;
+  resolvedCrossSizes: Map<string, number>;
+  boxes: Map<string, ResolvedBox>;
+}
+```
 
 ### Phase 1: Pure TypeScript
 
@@ -250,350 +260,33 @@ The API surface remains TypeScript regardless. Only the inner computation moves 
 
 ### Phase 3: Grid Layout
 
-CSS Grid track sizing (https://www.w3.org/TR/css-grid-1/#algo-track-sizing) is added as a separate set of modules that plug into the same tree-walking infrastructure. Grid and Flex must compose (a grid item can be a flex container and vice versa).
+CSS Grid track sizing is added as a separate set of modules that plug into the same tree-walking infrastructure. Grid and Flex must compose (a grid item can be a flex container and vice versa).
 
 ---
 
-## Agent-Driven Refinement Protocol
+## Test Tiers
 
-This section defines the exact workflow for autonomous agent-driven development. The agent should follow this protocol without human intervention, escalating only when it hits a decision point listed in the Open Questions section.
+Tests are organized into numbered tiers of increasing difficulty. All unlocked tiers are always run — regressions in earlier tiers block advancement.
 
-> **Ground truth hierarchy — read this before anything else:**
->
-> 1. **Fixture `expected` values are the ground truth.** They are measurements captured directly from Chromium via `getBoundingClientRect()`. They are not derived from the spec.
-> 2. **Chromium's behavior is the authority.** When a fixture doesn't cover a specific edge case, use `npm run probe` to render it in Chromium and observe the result.
-> 3. **The W3C spec is a secondary reference.** It is useful for understanding _why_ Chromium behaves a certain way, but Chromium does not implement the spec 1:1. When the spec and Chromium disagree, **always match Chromium**. Never argue with a fixture or probe result by citing the spec.
+**Tier 1: Static sizing** — Box model math only (padding, border, margin, boxSizing). No flex. ~50 fixtures.
 
-### The Iteration Loop
+**Tier 2: Basic flex distribution** — `flex-grow` only, row direction, no shrink or min/max constraints. ~100 fixtures.
 
-Every iteration follows this cycle:
+**Tier 3: Flex shrink and min/max clamping** — `flex-shrink` with overflow, min/max constraints, the clamping-and-refreeze loop. ~150 fixtures.
 
-```
-1. Run the full test suite for all unlocked tiers.
-2. Compute the fitness score.
-3. If the current tier is fully passing (100% pass rate), advance to the next tier.
-4. If not, identify the highest-priority failing test:
-   a. Prefer the simplest failing test (fewest nodes, fewest active properties).
-   b. Among tests of equal complexity, prefer ones whose error magnitude is smallest
-      (closest to passing, therefore most likely fixable with a small change).
-5. Diagnose the failure:
-   a. Log intermediate values at each module boundary.
-   b. Compare intermediate values to a reference run (Chromium ground truth
-      extracted by the test harness for the same input).
-   c. Identify which module's output first diverges from the reference.
-6. Modify the identified module.
-7. Re-run the full suite (not just the target test) to detect regressions.
-8. If the change improved the fitness score (even without flipping the target test
-   from fail to pass), commit it.
-9. If the change worsened the fitness score, revert it.
-10. Return to step 1.
-```
+**Tier 4: Cross-axis alignment** — `align-items`, `align-self`, stretch, column direction. ~100 fixtures.
 
-### Fitness Metric
+**Tier 5: justify-content and auto margins** — All `justify-content` variants, `margin: auto` on main axis. ~75 fixtures.
 
-The fitness score is a single number that the agent optimizes. It is computed as:
+**Tier 6: Flex wrapping** — `flex-wrap`, multi-line containers, `align-content`. ~150 fixtures.
 
-```
-fitness = (number of passing tests / total tests in unlocked tiers)
-        + (1 / (1 + mean_absolute_error_across_failing_tests))
-```
+**Tier 7: Nested flex containers** — Flex items that are themselves flex containers, indefinite size resolution, percentage dimensions. ~200 fixtures.
 
-The first term dominates (0 to 1 range, representing pass rate). The second term (0 to 1 range) provides gradient signal between discrete pass/fail flips. A change that reduces mean error across failing tests from 4.1px to 3.2px improves the fitness score even if no test flips from fail to pass.
+**Tier 8: Intrinsic content sizing** — `measureContent` callbacks, `flex-basis: content`, `min-content`/`max-content`. ~100 fixtures.
 
-The agent should log the fitness score after every iteration and maintain a running history. If the fitness score has not improved in 20 consecutive iterations, the agent should:
+**Tier 9: Reverse directions and order** — `row-reverse`, `column-reverse`, `order` property. ~50 fixtures.
 
-1. Re-examine its current approach and try a fundamentally different strategy.
-2. If still stuck after 40 iterations, flag the specific failing test pattern for human review.
-
-### Test Tiers (Difficulty Progression)
-
-Tests are organized into numbered tiers. The agent begins at Tier 1 and advances only when the current tier has a 100% pass rate. Tests from all unlocked tiers are always run (regressions in earlier tiers block advancement).
-
-**Tier 1: Static sizing (no flex behavior)**
-
-- Fixed-width container, fixed-width children.
-- Box model math only: padding, border, margin, `boxSizing`.
-- Verifies that `resolveBoxModel` is correct in isolation.
-- Approximately 50 generated test cases.
-
-**Tier 2: Basic flex distribution (single axis, no wrapping)**
-
-- `flex-grow` only, no shrink, no min/max constraints.
-- Container has a definite main size. Children have `flex-basis: 0` or fixed basis.
-- `flex-direction: row` only.
-- Verifies `resolveFlexibleLengths` for the simple "distribute free space" case.
-- Approximately 100 generated test cases.
-
-**Tier 3: Flex shrink and min/max clamping**
-
-- `flex-shrink` with overflow.
-- `minWidth` / `maxWidth` interacting with grow/shrink.
-- The clamping-and-refreeze loop in the flex algorithm (spec section 9.7, step 6).
-- This is where most layout engines have subtle bugs. Expect slow progress here.
-- Approximately 150 generated test cases.
-
-**Tier 4: Cross-axis alignment**
-
-- `align-items` and `align-self` variants.
-- Cross-size resolution (`stretch`, definite cross size, auto cross size).
-- `flex-direction: column` (swaps main/cross axes, tests that the solver is axis-agnostic).
-- Approximately 100 generated test cases.
-
-**Tier 5: justify-content and main-axis auto margins**
-
-- All `justify-content` variants.
-- `margin: auto` on main axis absorbing free space.
-- Interaction between `justify-content` and auto margins (auto margins take priority).
-- Approximately 75 generated test cases.
-
-**Tier 6: Flex wrapping**
-
-- `flex-wrap: wrap` and `wrap-reverse`.
-- Multi-line containers.
-- `align-content` for distributing space between lines.
-- Approximately 150 generated test cases.
-
-**Tier 7: Nested flex containers**
-
-- Flex items that are themselves flex containers.
-- Indefinite size resolution (a flex item's available space depends on its parent's flex algorithm, which depends on the item's intrinsic size, creating a circular dependency that the spec resolves with a specific procedure).
-- Percentage dimensions in nested contexts.
-- Approximately 200 generated test cases.
-
-**Tier 8: Intrinsic content sizing**
-
-- Leaf nodes with `measureContent` callbacks.
-- `flex-basis: content` and `flex-basis: auto` with intrinsic sizes.
-- `width: min-content` and `width: max-content` on flex items and containers.
-- Integration point for Pretext.js-style text measurement.
-- Approximately 100 generated test cases.
-
-**Tier 9: Reverse and order**
-
-- `flex-direction: row-reverse`, `column-reverse`.
-- `order` property reordering items.
-- Verifies that visual order and layout order are correctly separated.
-- Approximately 50 generated test cases.
-
-**Tier 10: Edge cases and adversarial inputs**
-
-- Zero-size containers.
-- Deeply nested trees (10+ levels).
-- All flex items with `flex-grow: 0` and `flex-shrink: 0` (no flexibility).
-- Negative margins.
-- Extremely large values (testing numeric stability).
-- `display: none` children interleaved with visible ones.
-- Approximately 200 generated test cases.
-
-Each tier includes both hand-written reference cases (for known tricky situations) and randomly generated cases (for coverage).
-
-### Automated Test Generation
-
-The test harness includes a generator that produces random layout trees constrained to the current tier's parameter space. This is essential: hand-written tests encode the author's assumptions about what's hard, but randomly generated tests surface unexpected interactions.
-
-The generator works as follows:
-
-```
-For a given tier:
-1. Define the parameter space (which CSS properties are active, value ranges).
-2. Generate N random layout trees within that parameter space.
-   - Tree depth: 1 to max_depth_for_tier.
-   - Children per node: 1 to max_children_for_tier.
-   - Property values: uniformly sampled from allowed ranges, with some
-     bias toward edge values (0, very small, very large).
-3. For each generated tree:
-   a. Serialize it to the solver's JSON input format.
-   b. Convert it to equivalent HTML/CSS.
-   c. Render the HTML in headless Chromium.
-   d. Extract getBoundingClientRect() for every element.
-   e. Save the input JSON and Chromium's output as a test fixture.
-4. The generated fixtures are deterministic (seeded RNG) and cached.
-   Re-running the generator with the same seed produces the same tests.
-```
-
-The generator should be run once to produce the initial corpus, then re-run with new seeds periodically to expand coverage. The agent can also request new tests in a specific parameter subspace when it suspects a bug in a particular interaction (e.g., "generate 50 more tests where flex-shrink > 0 and minWidth is set").
-
-### Intermediate Value Logging and Diagnosis
-
-When a test fails, the agent needs to determine which sub-algorithm is wrong. To support this, the solver must expose a debug mode that logs the output of every module for a given input:
-
-```typescript
-interface DebugTrace {
-  // After resolveBoxModel
-  resolvedBoxModels: Map<
-    string,
-    {
-      contentWidth: number;
-      contentHeight: number;
-      paddingTop: number;
-      paddingRight: number;
-      paddingBottom: number;
-      paddingLeft: number;
-      borderTop: number;
-      borderRight: number;
-      borderBottom: number;
-      borderLeft: number;
-      marginTop: number;
-      marginRight: number;
-      marginBottom: number;
-      marginLeft: number;
-    }
-  >;
-
-  // After collectFlexItems
-  flexItemOrder: string[]; // item IDs in resolved order
-
-  // After determineMainSize
-  hypotheticalMainSizes: Map<string, number>;
-
-  // After collectIntoLines
-  flexLines: Array<{ itemIds: string[]; mainSize: number }>;
-
-  // After resolveFlexibleLengths (per line)
-  resolvedMainSizes: Map<string, number>;
-  frozenItems: Map<string, "min-clamped" | "max-clamped" | "flexible">;
-
-  // After resolveCrossSize
-  resolvedCrossSizes: Map<string, number>;
-
-  // Final output
-  boxes: Map<string, ResolvedBox>;
-}
-```
-
-The test harness should also extract intermediate reference values from Chromium where possible (e.g., computed flex-basis, used main size via `getComputedStyle`). Where Chromium doesn't expose intermediates, the harness can infer them from the final positions (e.g., if you know the container size and the final item positions, you can back-calculate how much free space was distributed).
-
-The agent uses this to narrow failures: "the hypothetical main sizes are correct, but resolvedMainSizes after the flex length resolution step diverge from expected. The error is in `resolveFlexibleLengths`."
-
-### Regression Prevention
-
-Every time a test flips from failing to passing, it is marked as a **locked test**. If a locked test ever fails again, the iteration is treated as a regression and the change is automatically reverted, regardless of whether the overall fitness score improved. This prevents the common failure mode where fixing one case breaks a previously-solved case, leading to oscillation.
-
-### Stall Detection and Recovery
-
-If the fitness score plateaus (no improvement for 20 iterations), the agent should attempt these recovery strategies in order:
-
-1. **Property isolation**: Take the simplest failing test and strip it down to the minimum properties that reproduce the failure. This often reveals that the issue is a specific two-property interaction, not a broad algorithmic problem.
-
-2. **Reference comparison**: For the failing case, run a known-correct implementation (Yoga or Taffy via Wasm) and compare intermediate values. This can reveal whether the issue is a misunderstanding of the spec or a math error.
-
-3. **Chromium probing**: Use `npm run probe` to render a minimal reproduction of the failing case directly in Chromium and observe what it actually does. Chromium's output is the ground truth — not the W3C spec. Chromium does not implement the spec 1:1; when they disagree, match Chromium. The spec is useful for understanding _why_ Chromium behaves a certain way, but it is never authoritative over a fixture or a probe result.
-
-4. **Spec re-reading**: After confirming Chromium's actual behavior via probing, re-read the relevant spec section to understand the intended algorithm. Sometimes this reveals a missed step or edge case — but always validate against Chromium output, not spec language.
-
-5. **Architectural pivot**: If the module's approach is fundamentally wrong (e.g., it's trying to resolve flex lengths in a single pass when the spec requires iterative clamping), restructure the module rather than patching it.
-
-6. **Escalate**: After 40 iterations with no improvement, save the failing test cases, the current intermediate value traces, and a summary of attempted approaches. Flag for human review.
-
----
-
-## Bootstrap Sequence
-
-Before writing any layout algorithm code, the agent must build the infrastructure that makes iterative refinement possible. This is the required startup sequence:
-
-### Step 1: Test Harness (iterations 1-5)
-
-- Build the fixture runner: reads JSON fixtures, runs the solver, compares output, reports per-test pass/fail and per-property error magnitude.
-- Build the Chromium-based generator: takes a tier definition (parameter space), generates random layout trees, renders them in headless Chromium via Puppeteer, captures `getBoundingClientRect()` for every element, writes fixture files.
-- Generate the Tier 1 fixture corpus (50 tests).
-- Verify the harness works by running it against a trivial stub solver that returns all zeros. Confirm it correctly reports failures with accurate error magnitudes.
-
-### Step 2: Fitness Metric and Iteration Tracker (iterations 6-7)
-
-- Implement the fitness score calculator.
-- Build the iteration log: after each run, append an entry with timestamp, fitness score, number of passing/failing tests per tier, and a one-line summary of what changed.
-- Build the regression lock: track which tests have previously passed, auto-revert changes that break locked tests.
-
-### Step 3: Debug Trace Infrastructure (iterations 8-10)
-
-- Add the `DebugTrace` interface to the solver's API.
-- Wire up the trace logger so that every module boundary emits intermediate values.
-- Build a trace comparator that takes two traces (solver vs. reference) and reports the first point of divergence.
-
-### Step 4: Prior Art Evaluation (iterations 11-15)
-
-- Convert 50 of Yoga's simplest test cases to fixture format. Run through Chromium to verify they produce the expected output. Report how many are directly usable.
-- Compile Taffy to Wasm. Run Tier 1 and Tier 2 fixtures against it. Report accuracy, bundle size, and API friction. Write a short recommendation: wrap Taffy or build from scratch.
-- Convert a sample of web-platform-tests flexbox tests to fixture format. Assess conversion difficulty and coverage overlap with the generated tests.
-
-### Step 5: Begin Algorithm Implementation (iteration 16+)
-
-- Only now start implementing the layout solver, beginning with Tier 1 (box model math).
-- Follow the iteration loop defined in the Refinement Protocol.
-
----
-
-## Testing Strategy
-
-### Dual-Mode Test Suite
-
-The test suite operates in two modes:
-
-**Fixture mode** (default, fast): Runs the solver against pre-computed fixture files (JSON input + expected output). No browser required. This is what the agent runs on every iteration. Target: full suite completes in under 30 seconds.
-
-**Generation mode** (slow, run periodically): Launches headless Chromium, generates new fixtures, and validates existing fixtures against current browser output. This catches cases where the fixtures themselves are wrong (e.g., due to a Chromium update changing layout behavior). Target: full regeneration completes in under 10 minutes.
-
-### Fixture Format
-
-Each fixture is a JSON file:
-
-```json
-{
-  "tier": 3,
-  "seed": 48291,
-  "description": "flex-shrink with minWidth clamping, 3 items, row direction",
-  "input": { "/* LayoutNode tree */": true },
-  "expected": {
-    "node-1": { "x": 0, "y": 0, "width": 200, "height": 100 },
-    "node-2": { "x": 200, "y": 0, "width": 150, "height": 100 }
-  },
-  "chromiumVersion": "128.0.6613.84",
-  "tolerance": 0.5
-}
-```
-
-### Targeted Test Generation on Demand
-
-Beyond the initial corpus, the agent should be able to generate focused test batches when it suspects a specific property interaction is causing failures. The generator should accept parameter overrides:
-
-```
-generate-tests --tier 3 --count 50 --override "flexShrink=range(0.5,3.0)" --override "minWidth=range(0,200)" --seed 99001
-```
-
-This lets the agent explore a narrow region of the parameter space intensively when it's debugging a specific interaction.
-
-### Ad-hoc Chromium Probing
-
-When debugging a specific failure, use `npm run probe` to render arbitrary HTML or a LayoutNode tree directly in Chromium and read back the computed box values. This is the fastest way to test a hypothesis about Chromium's behavior without generating a full fixture.
-
-```bash
-# Pipe an HTML snippet via stdin
-echo '<div id="root-node" style="display:flex; width:300px">...' | npm run probe
-
-# Re-render an existing fixture and diff against its saved expected values
-npm run probe -- --fixture fixtures/tier-3-30042.json
-
-# Render a LayoutNode JSON file (same format as fixture "input")
-npm run probe -- --json path/to/node.json
-
-# Render an HTML file
-npm run probe -- --file path/to/snippet.html
-
-# Get raw JSON output (pipe into jq, save as a new fixture, etc.)
-npm run probe -- --fixture fixtures/tier-3-30042.json --json-out
-```
-
-The `--fixture` mode is especially useful for verifying that a saved fixture still matches the current Chromium version.
-
-### Benchmark Suite
-
-A separate benchmark runs on every 10th iteration (not every iteration, to save time). It tracks:
-
-- Median and p99 time for each tree size target (100, 1,000, 10,000 nodes).
-- Memory allocation per run (using Node.js `process.memoryUsage()` delta).
-- Time per module (using `performance.now()` around each sub-algorithm call).
-
-The agent should not optimize for performance until Tier 7 is fully passing. Premature optimization of an incorrect algorithm wastes iterations.
+**Tier 10: Edge cases and adversarial inputs** — Zero-size containers, deep nesting (10+ levels), all items non-flexible, negative margins, large values, `display: none` interleaved. ~200 fixtures.
 
 ---
 
@@ -602,70 +295,10 @@ The agent should not optimize for performance until Tier 7 is fully passing. Pre
 | Project                         | What to Learn                                                                                                                                            | Watch Out For                                                                                                                              |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Yoga** (Facebook)             | Architecture, test suite, edge case handling for flexbox. Yoga has thousands of generated test cases that can serve as fixtures after format conversion. | Intentional spec deviations for cross-platform consistency. When Yoga and Chromium disagree, this project follows Chromium.                |
-| **Pretext.js** (Cheng Lou)      | Development methodology, API design philosophy, and several directly applicable algorithmic patterns (see **Pretext Reference Guide** below).            | Text-only; no flexbox solving. Adapt patterns conceptually — don't import code.                                                            |
+| **Pretext.js** (Cheng Lou)      | Development methodology, API design philosophy, and several directly applicable algorithmic patterns (see Pretext Reference Guide in CLAUDE.md).         | Text-only; no flexbox solving. Adapt patterns conceptually — don't import code.                                                            |
 | **Taffy** (Rust)                | Modern Rust flexbox/grid implementation with good spec compliance. Evaluate as a potential Wasm starting point for Phase 2.                              | Rust-native API. Evaluate Wasm bundle size and whether its spec compliance is close enough to justify wrapping rather than reimplementing. |
 | **web-platform-tests** (W3C)    | Thousands of official CSS flexbox and grid test cases.                                                                                                   | HTML-based; need automated conversion to the solver's input format. Many test CSS features outside this project's scope.                   |
 | **Stretch** (Vislyhq, archived) | Earlier Rust flexbox engine. Yoga-compatible test suite.                                                                                                 | Archived, known spec compliance gaps.                                                                                                      |
-
----
-
-## Pretext Reference Guide
-
-Pretext (`pretext/`) is a DOM-independent text measurement library cloned into this repo as a reference. It solves a structurally similar problem: extract a historically DOM-dependent computation (text line-breaking) into a pure-arithmetic layer that matches browser output. Its architecture and several specific algorithms translate directly to flexbox layout.
-
-**What Pretext does**: Given a string and a font, `prepare(text, font)` segments and measures the text once. Then `layout(prepared, maxWidth)` does pure arithmetic line-breaking with no DOM reads, producing line count and height in ~0.0002ms. The expensive work is done once and cached; all subsequent size queries are arithmetic-only.
-
-### Patterns Worth Studying
-
-**1. Intrinsic size as a degenerate layout pass** (`pretext/src/line-break.ts`)
-
-Pretext computes `min-content` / `max-content` / `fit-content` widths by calling the same line-breaking algorithm with different width constraints — not a separate code path:
-
-```typescript
-// min-content: break at every opportunity
-measureNaturalWidth(prepared); // calls layout with maxWidth = Infinity
-
-// max-content: never break (except hard breaks)
-// → widest line in the output is the max-content width
-```
-
-Apply this directly in `determineMainSize` (Tier 8): when a flex item has `width: min-content` or `width: max-content`, call `solveLayout` on the subtree with `width: Infinity` and read the result's extent — don't write a separate intrinsic-sizing code path.
-
-**2. Non-materializing walkers** (`pretext/src/line-break.ts`, `walkPreparedLinesRaw`)
-
-Many Pretext APIs compute statistics (line count, widest line, overflow) without building line objects:
-
-```typescript
-walkLineRanges(prepared, maxWidth, (onLine) => {
-  // receives: { width, start, end } — no string allocation
-});
-```
-
-Apply this to the flex length resolution loop (`resolveFlexibleLengths`): the iterative clamping loop (spec §9.7 step 6) runs many tentative passes. Implement a "probe" variant that computes free space distribution and identifies frozen items without writing final positions, then commit positions only once the loop converges. This avoids allocating intermediate box objects per iteration.
-
-**3. Two-phase separation: measure once, layout fast** (`pretext/src/layout.ts`)
-
-Pretext's `prepare()` does all expensive work (canvas measurement, segmentation, caching) before the hot path. The `layout()` call is pure arithmetic.
-
-The equivalent here is separating the `measureContent` callback resolution phase from the positioning phase. Call all `measureContent` callbacks and cache their results before the flex algorithm starts. Never call them during the iterative clamping loop. See `pretext/src/measurement.ts` for how the segment metrics cache (`Map<font, Map<segment, metrics>>`) keeps cache granularity small while maximizing reuse.
-
-**4. Handling browser quirks explicitly** (`pretext/src/measurement.ts`, `EngineProfile`)
-
-Pretext detects Chromium vs. Safari vs. Firefox at startup and stores the differences in an `EngineProfile` struct (`lineFitEpsilon`, `preferPrefixWidthsForBreakableRuns`, etc.), then threads it through all layout calls. It does not try to write one algorithm that works everywhere — it branches on the profile.
-
-This project targets Chromium specifically, but the same pattern applies when Chromium's behavior diverges from the spec in a documented way: encode the deviation as a named constant or flag rather than a magic number buried in an expression. When you're stuck on a fixture and can't reconcile the spec with Chromium's output, the answer is usually a Chromium-specific behavior that needs to be named and encoded the way Pretext names `lineFitEpsilon`.
-
-**5. Accuracy snapshots as regression gates** (`pretext/accuracy/`)
-
-Pretext maintains `accuracy/chrome.json`, `accuracy/safari.json`, `accuracy/firefox.json` — pre-computed expected output for a matrix of fonts × sizes × widths × texts. These are committed to the repo. CI fails if the algorithm changes produce different values.
-
-This is exactly the `tests/locked_tests.json` + fixture approach used here. If you need to validate that a change affects only the right cases, look at how `pretext/pages/accuracy.ts` sweeps the parameter space and compares against the stored snapshots.
-
-### Where Not to Look
-
-- `pretext/src/analysis.ts` — text segmentation and script-specific rules (CJK, Arabic, Thai). Interesting but not relevant to layout.
-- `pretext/src/bidi.ts` — Unicode bidirectional algorithm. Not applicable.
-- `pretext/src/rich-inline.ts` — inline flow with atomic items and per-item padding. Useful only if implementing inline layout (out of scope for Phase 1).
 
 ---
 
@@ -703,14 +336,12 @@ This is exactly the `tests/locked_tests.json` + fixture approach used here. If y
 
 ## Open Questions for Investigation
 
-These are unresolved decisions. The agent should investigate each one during the Bootstrap Sequence (Step 4) or when it first becomes relevant during tier progression. For each question, the agent writes a short decision document: problem statement, options considered, evidence gathered, recommendation. These investigations count as productive iterations even though they don't improve the fitness score.
+1. **Percentage resolution in indefinite contexts.** When a flex item has `width: 50%` but the flex container has `width: auto`, browsers resolve this via a specific procedure. Generate 20 test cases exploring this interaction, document what Chromium does, and implement accordingly. Relevant at Tier 7.
 
-1. **Percentage resolution in indefinite contexts.** When a flex item has `width: 50%` but the flex container has `width: auto`, browsers resolve this via a specific procedure. Generate 20 test cases exploring this interaction, document what Chromium does, and implement accordingly. This becomes relevant at Tier 7 (nested containers).
+2. **Baseline alignment feasibility.** `align-items: baseline` requires knowing the first baseline offset of each flex item's content. Investigate whether extending `measureContent` to return a `baseline` offset is sufficient. If complexity is high relative to usage frequency, defer to a later phase. Relevant at Tier 4.
 
-2. **Baseline alignment feasibility.** Flexbox baseline alignment (`align-items: baseline`) requires knowing the first baseline offset of each flex item's content. Investigate whether extending the `measureContent` callback to return a `baseline` offset is sufficient, or whether baseline alignment needs its own module. If the complexity is high relative to usage frequency, recommend deferring to a later phase. This becomes relevant at Tier 4 (cross-axis alignment).
+3. **Yoga test suite reusability.** Automate conversion of Yoga's test format to fixture format. Run converted fixtures through Chromium to determine how many are directly usable vs. reflect Yoga-specific deviations.
 
-3. **Yoga test suite reusability.** Yoga has thousands of generated test cases. Automate the conversion of Yoga's test format to this project's fixture format. Run the converted fixtures through Chromium to determine how many produce the same output as Yoga expects. Report: (a) how many are directly usable, (b) how many reflect Yoga-specific deviations, (c) whether the conversion is worth maintaining. Investigate during Bootstrap Step 4.
+4. **Taffy as a starting point.** Compile Taffy to Wasm and benchmark against the Tier 1-5 fixture corpus. Report accuracy, bundle size, and API ergonomics. Recommend: wrap Taffy or build from scratch.
 
-4. **Taffy as a starting point.** Compile Taffy to Wasm and benchmark it against the Tier 1-5 fixture corpus. Report: accuracy (% of fixtures passing at 0.5px tolerance), bundle size, API ergonomics. Recommend whether to use Taffy as the computation backend or build from scratch. Investigate during Bootstrap Step 4.
-
-5. **Sub-pixel rounding strategy.** Browsers use specific rounding strategies when converting fractional layout values to pixel positions (e.g., Chromium rounds to 1/64th of a pixel internally). Investigate Chromium's rounding behavior and determine whether the solver needs to replicate it or whether the 0.5px tolerance absorbs the difference. This becomes relevant when Tier 2 tests show consistent small errors.
+5. **Sub-pixel rounding strategy.** Chromium rounds to 1/64th of a pixel internally. Investigate whether the solver needs to replicate this or whether the 0.5px tolerance absorbs the difference. Relevant when Tier 2 tests show consistent small errors.

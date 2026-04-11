@@ -30,6 +30,7 @@ function genBoxSides(rng: RNG, max: number) {
 }
 
 let idCounter = 1;
+let tier10Config = { category: 0, maxDepth: 1 };
 
 function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
   const id = idCounter === 1 ? "root-node" : `node-${idCounter}`;
@@ -352,6 +353,147 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         ] as const);
       }
     }
+  } else if (tier === 10) {
+    const { category, maxDepth } = tier10Config;
+
+    if (category === 0) {
+      // Zero-size containers
+      if (depth > 0) {
+        node.display = "flex";
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        // Simplify box model for root to avoid box-sizing complications
+        node.padding = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.border = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.margin = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.boxSizing = "border-box";
+        const zeroWidth = rng.next() < 0.6;
+        const zeroHeight = rng.next() < 0.6;
+        node.width = zeroWidth ? 0 : rng.nextRange(200, 500);
+        node.height = zeroHeight ? 0 : rng.nextRange(200, 500);
+      } else {
+        node.width = rng.nextRange(20, 100);
+        node.height = rng.nextRange(20, 80);
+        node.flexGrow = rng.nextChoice([0, 0, 1]);
+        node.flexShrink = rng.nextChoice([0, 1]);
+      }
+    } else if (category === 1) {
+      // Deep nesting
+      if (depth > 0) {
+        node.display = "flex";
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        if (depth === maxDepth) {
+          // Root: definite size
+          node.width = rng.nextRange(300, 600);
+          node.height = rng.nextRange(300, 600);
+        } else {
+          // Intermediate: flex container that is also a flex item
+          if (rng.next() < 0.6) node.width = rng.nextRange(50, 200);
+          if (rng.next() < 0.6) node.height = rng.nextRange(50, 200);
+          node.flexGrow = rng.nextChoice([0, 1, 1]);
+          node.flexShrink = rng.nextChoice([0, 1]);
+          if (rng.next() < 0.4) node.flexBasis = rng.nextRange(30, 150);
+        }
+      } else {
+        // Leaf
+        node.width = rng.nextRange(20, 80);
+        node.height = rng.nextRange(20, 80);
+        node.flexGrow = rng.nextChoice([0, 1]);
+        node.flexShrink = rng.nextChoice([0, 1]);
+      }
+    } else if (category === 2) {
+      // No flexibility (flex-grow: 0, flex-shrink: 0)
+      if (depth > 0) {
+        node.display = "flex";
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = rng.nextChoice(["nowrap", "nowrap", "wrap"] as const);
+        node.width = rng.nextRange(200, 600);
+        node.height = rng.nextRange(200, 500);
+        node.justifyContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "space-between",
+          "space-around",
+        ] as const);
+        if (rng.next() < 0.5) {
+          node.alignItems = rng.nextChoice([
+            "flex-start",
+            "flex-end",
+            "center",
+            "stretch",
+          ] as const);
+        }
+      } else {
+        node.width = rng.nextRange(30, 120);
+        node.height = rng.nextRange(30, 100);
+        node.flexGrow = 0;
+        node.flexShrink = 0;
+        node.flexBasis = rng.nextChoice([0, rng.nextRange(20, 100)]);
+      }
+    } else if (category === 3) {
+      // Negative margins
+      if (depth > 0) {
+        node.display = "flex";
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        node.width = rng.nextRange(300, 600);
+        node.height = rng.nextRange(200, 500);
+      } else {
+        node.width = rng.nextRange(40, 150);
+        node.height = rng.nextRange(30, 120);
+        node.flexGrow = rng.nextChoice([0, 0, 1]);
+        node.flexShrink = rng.nextChoice([0, 1]);
+        // Randomly negate some margins
+        if (rng.next() < 0.6) node.margin.left = -rng.nextRange(1, 20);
+        if (rng.next() < 0.6) node.margin.top = -rng.nextRange(1, 20);
+        if (rng.next() < 0.3) node.margin.right = -rng.nextRange(1, 15);
+        if (rng.next() < 0.3) node.margin.bottom = -rng.nextRange(1, 15);
+      }
+    } else if (category === 4) {
+      // Large values (numeric stability)
+      if (depth > 0) {
+        node.display = "flex";
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        node.width = rng.nextRange(1000, 5000);
+        node.height = rng.nextRange(1000, 5000);
+      } else {
+        node.width = rng.nextRange(200, 2000);
+        node.height = rng.nextRange(200, 2000);
+        node.flexGrow = rng.nextChoice([0, 0, 1]);
+        node.flexShrink = rng.nextChoice([0, 1]);
+        node.flexBasis = rng.nextChoice([0, rng.nextRange(100, 1000)]);
+      }
+    } else if (category === 5) {
+      // display:none children interleaved with visible ones
+      if (depth > 0) {
+        node.display = "flex";
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        node.width = rng.nextRange(300, 600);
+        node.height = rng.nextRange(200, 400);
+        if (rng.next() < 0.5) {
+          node.alignItems = rng.nextChoice([
+            "flex-start",
+            "flex-end",
+            "center",
+            "stretch",
+          ] as const);
+        }
+      } else {
+        if (rng.next() < 0.33) {
+          // display:none item — no layout dimensions needed
+          node.display = "none";
+        } else {
+          node.width = rng.nextRange(30, 120);
+          node.height = rng.nextRange(30, 100);
+          node.flexGrow = rng.nextChoice([0, 0, 1]);
+          node.flexShrink = rng.nextChoice([0, 1]);
+        }
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -457,9 +599,13 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
           ? rng.nextRange(4, 8)
           : tier === 9
             ? rng.nextRange(3, 6)
-            : tier >= 2 && tier <= 5
-              ? rng.nextRange(2, 5)
-              : rng.nextRange(1, 3);
+            : tier === 10
+              ? tier10Config.category === 1
+                ? rng.nextRange(1, 2) // deep nesting: 1-2 per level
+                : rng.nextRange(3, 6) // other categories: 3-6 items
+              : tier >= 2 && tier <= 5
+                ? rng.nextRange(2, 5)
+                : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
       node.children.push(genNode(rng, depth - 1, tier));
     }
@@ -539,11 +685,23 @@ async function generateFixtures(
     const seed = tier * 10000 + i;
     const rng = new RNG(seed);
     idCounter = 1;
-    const tree = genNode(
-      rng,
-      (tier >= 2 && tier <= 6) || tier === 8 || tier === 9 ? 1 : 2,
-      tier,
-    );
+
+    // Configure tier 10 per-fixture before calling genNode
+    if (tier === 10) {
+      tier10Config.category = i % 6;
+      tier10Config.maxDepth = tier10Config.category === 1 ? 5 : 1;
+    }
+
+    const depth =
+      tier === 7
+        ? 2
+        : tier === 10
+          ? tier10Config.maxDepth
+          : (tier >= 2 && tier <= 6) || tier === 8 || tier === 9
+            ? 1
+            : 2;
+
+    const tree = genNode(rng, depth, tier);
 
     // For test stability, position root container absolutely at 0,0
     // to avoid body margins affecting things (even though we reset them)
@@ -583,6 +741,9 @@ async function generateFixtures(
       elements.forEach((el) => {
         const rect = el.getBoundingClientRect();
         const style = window.getComputedStyle(el);
+
+        // Skip display:none elements — they don't participate in layout
+        if (style.display === "none") return;
 
         const parse = (val: string) => parseFloat(val) || 0;
 
@@ -730,6 +891,8 @@ async function run() {
     tasks.push({ tier: 6, count: 150 });
     tasks.push({ tier: 7, count: 200 });
     tasks.push({ tier: 8, count: 100 });
+    tasks.push({ tier: 9, count: 50 });
+    tasks.push({ tier: 10, count: 200 });
   }
 
   for (const task of tasks) {

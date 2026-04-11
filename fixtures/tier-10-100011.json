@@ -1,0 +1,205 @@
+{
+  "tier": 10,
+  "seed": 100011,
+  "description": "Tier 10 randomly generated fixture (seed 100011)",
+  "input": {
+    "id": "root-node",
+    "padding": {
+      "top": 14,
+      "right": 18,
+      "bottom": 4,
+      "left": 12
+    },
+    "margin": {
+      "top": 2,
+      "right": 7,
+      "bottom": 0,
+      "left": 15
+    },
+    "border": {
+      "top": 3,
+      "right": 3,
+      "bottom": 1,
+      "left": 5
+    },
+    "boxSizing": "content-box",
+    "display": "flex",
+    "children": [
+      {
+        "id": "node-2",
+        "padding": {
+          "top": 4,
+          "right": 17,
+          "bottom": 10,
+          "left": 11
+        },
+        "margin": {
+          "top": 6,
+          "right": 15,
+          "bottom": 17,
+          "left": 13
+        },
+        "border": {
+          "top": 2,
+          "right": 6,
+          "bottom": 2,
+          "left": 5
+        },
+        "boxSizing": "content-box",
+        "display": "block",
+        "children": [],
+        "width": 109,
+        "height": 37,
+        "flexGrow": 1,
+        "flexShrink": 1
+      },
+      {
+        "id": "node-3",
+        "padding": {
+          "top": 14,
+          "right": 14,
+          "bottom": 15,
+          "left": 7
+        },
+        "margin": {
+          "top": 8,
+          "right": 0,
+          "bottom": 12,
+          "left": 10
+        },
+        "border": {
+          "top": 1,
+          "right": 8,
+          "bottom": 3,
+          "left": 4
+        },
+        "boxSizing": "content-box",
+        "display": "none",
+        "children": []
+      },
+      {
+        "id": "node-4",
+        "padding": {
+          "top": 7,
+          "right": 11,
+          "bottom": 18,
+          "left": 7
+        },
+        "margin": {
+          "top": 1,
+          "right": 9,
+          "bottom": 17,
+          "left": 3
+        },
+        "border": {
+          "top": 4,
+          "right": 2,
+          "bottom": 2,
+          "left": 2
+        },
+        "boxSizing": "border-box",
+        "display": "block",
+        "children": [],
+        "width": 58,
+        "height": 48,
+        "flexGrow": 0,
+        "flexShrink": 0
+      }
+    ],
+    "flexDirection": "column",
+    "flexWrap": "nowrap",
+    "width": 388,
+    "height": 311
+  },
+  "expected": {
+    "root-node": {
+      "id": "root-node",
+      "x": -17,
+      "y": -17,
+      "width": 388,
+      "height": 311,
+      "padding": {
+        "top": 14,
+        "right": 18,
+        "bottom": 4,
+        "left": 12
+      },
+      "border": {
+        "top": 3,
+        "right": 3,
+        "bottom": 1,
+        "left": 5
+      },
+      "margin": {
+        "top": 2,
+        "right": 7,
+        "bottom": 0,
+        "left": 15
+      },
+      "borderBoxWidth": 426,
+      "borderBoxHeight": 333,
+      "outerWidth": 448,
+      "outerHeight": 335
+    },
+    "node-2": {
+      "id": "node-2",
+      "x": 13,
+      "y": 6,
+      "width": 109,
+      "height": 204,
+      "padding": {
+        "top": 4,
+        "right": 17,
+        "bottom": 10,
+        "left": 11
+      },
+      "border": {
+        "top": 2,
+        "right": 6,
+        "bottom": 2,
+        "left": 5
+      },
+      "margin": {
+        "top": 6,
+        "right": 15,
+        "bottom": 17,
+        "left": 13
+      },
+      "borderBoxWidth": 148,
+      "borderBoxHeight": 222,
+      "outerWidth": 176,
+      "outerHeight": 245
+    },
+    "node-4": {
+      "id": "node-4",
+      "x": 3,
+      "y": 246,
+      "width": 36,
+      "height": 17,
+      "padding": {
+        "top": 7,
+        "right": 11,
+        "bottom": 18,
+        "left": 7
+      },
+      "border": {
+        "top": 4,
+        "right": 2,
+        "bottom": 2,
+        "left": 2
+      },
+      "margin": {
+        "top": 1,
+        "right": 9,
+        "bottom": 17,
+        "left": 3
+      },
+      "borderBoxWidth": 58,
+      "borderBoxHeight": 48,
+      "outerWidth": 70,
+      "outerHeight": 66
+    }
+  },
+  "chromiumVersion": "Chrome/146.0.7680.153",
+  "tolerance": 0.5
+}

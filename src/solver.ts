@@ -1,12 +1,12 @@
 import {
-  BoxSides,
-  DebugTrace,
-  FlexLineInfo,
-  LayoutNode,
-  LayoutResultWithTrace,
-  ResolvedBox,
-  ResolvedBoxModel,
-  SolverOptions,
+    BoxSides,
+    DebugTrace,
+    FlexLineInfo,
+    LayoutNode,
+    LayoutResultWithTrace,
+    ResolvedBox,
+    ResolvedBoxModel,
+    SolverOptions,
 } from "./types";
 
 const ZERO_SIDES: BoxSides = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -255,18 +255,27 @@ function computeIntrinsicContentSize(
       }
 
       // Contribution per CSS Flexbox spec 9.9.1:
-      // Growable items in width: max(flex-base, max-content) when content > 0,
-      //   OR flex-base when content=0 and item can't shrink (flex-base is hard minimum)
-      // Non-growable shrinkable with no preferred size: max-content (not flex-base)
-      // Non-growable / Height: flex-base
+      // Growable items: max(flex-base, max-content) when content > 0.
+      // When content is 0 in height dimension (indefinite column container): items stay
+      // at flex-base (no shrinkage in indefinite context), so use flex-base.
+      // When content is 0 in width dimension: shrinkable items contribute 0 (min-content),
+      // non-shrinkable items contribute flex-base.
+      // For height, only apply when child has no explicit height; explicit height with
+      // flexBasis means flexBasis wins in flex layout (avoid inflating with explicit height).
       const dimProp = isNodeRow ? "width" : "height";
       let contentSize: number;
-      if ((child.flexGrow ?? 0) > 0 && dimension === "width") {
+      if (
+        (child.flexGrow ?? 0) > 0 &&
+        (dimension === "width" || typeof child[dimProp] !== "number")
+      ) {
         if (maxContentMain > 0) {
           contentSize = Math.max(flexBase, maxContentMain);
-        } else if ((child.flexShrink ?? 1) === 0) {
+        } else if (dimension === "height" || (child.flexShrink ?? 1) === 0) {
+          // Height dimension: items stay at flex-base in indefinite container
+          // Width dimension with no shrink: flex-base is hard minimum
           contentSize = flexBase;
         } else {
+          // Width dimension, shrinkable, no content: contributes 0 (can shrink to nothing)
           contentSize = maxContentMain;
         }
       } else if (
@@ -282,7 +291,22 @@ function computeIntrinsicContentSize(
         // to accommodate flex-basis for items that can shrink away)
         contentSize = maxContentMain;
       } else {
-        contentSize = flexBase;
+        // When item has an explicit main-axis dimension AND a flex-basis:
+        // the effective minimum = max(flexBase, min(specifiedContent, recursiveMinContent))
+        // This mirrors min-width:auto: clamp recursive min-content to specified size,
+        // then take the larger of that and the flex-base.
+        const hasExplicitMainDim = isNodeRow
+          ? typeof child.width === "number"
+          : typeof child.height === "number";
+        if (hasExplicitMainDim && typeof child.flexBasis === "number" && child.display === "flex") {
+          const specifiedContent = maxContentMain; // already computed from explicit dim
+          const recursiveMinContent = computeIntrinsicContentSize(
+            child, dimension, nodeMap, boxModelMap, "min-content"
+          );
+          contentSize = Math.max(flexBase, Math.min(specifiedContent, recursiveMinContent));
+        } else {
+          contentSize = flexBase;
+        }
       }
 
       total += contentSize + pb + margin;
@@ -1228,17 +1252,15 @@ export function solveLayout(
               if (remainingSpace > 0 && n > 0) {
                 interItemGap = remainingSpace / n;
                 mainAxisOffset = interItemGap / 2;
-              } else {
-                mainAxisOffset = remainingSpace / 2;
               }
+              // negative free space → safe alignment: fall back to flex-start (offset stays 0)
               break;
             case "space-evenly":
               if (remainingSpace > 0 && n > 0) {
                 interItemGap = remainingSpace / (n + 1);
                 mainAxisOffset = interItemGap;
-              } else {
-                mainAxisOffset = remainingSpace / 2;
               }
+              // negative free space → safe alignment: fall back to flex-start (offset stays 0)
               break;
             case "flex-start":
             default:
