@@ -572,6 +572,108 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         if (rng.next() < 0.3) node.flexBasis = rng.nextRange(20, 100);
       }
     }
+  } else if (tier === 12) {
+    // Tier 12: position:fixed (relative to root) and nested absolute positioning.
+    //
+    // Category 0 (even seeds): position:fixed children — positioned relative to root.
+    // Category 1 (odd seeds):  nested absolute — an intermediate flex child has
+    //   position:relative and contains its own absolute grandchildren.
+    //
+    // depth=2: root (depth 2) → intermediates (depth 1) → leaves (depth 0)
+    // depth=1 for category 0 (flat, like Tier 11)
+    const cat = (node.id === "root-node" ? 0 : 0); // determined per-fixture in generateFixtures
+
+    if (depth === 2) {
+      // Root flex container = the "viewport" for position:fixed children.
+      // Must have margin=border=padding=0 and match Puppeteer's 800×600 viewport
+      // so that fixed children are positioned correctly relative to the viewport.
+      node.display = "flex";
+      node.flexDirection = rng.nextChoice(["row", "column", "row"] as const);
+      node.flexWrap = "nowrap";
+      node.width = 800;
+      node.height = 600;
+      node.padding = { top: 0, right: 0, bottom: 0, left: 0 };
+      node.border = { top: 0, right: 0, bottom: 0, left: 0 };
+      node.margin = { top: 0, right: 0, bottom: 0, left: 0 };
+      node.boxSizing = "border-box";
+      if (rng.next() < 0.4) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+    } else if (depth === 1) {
+      // Intermediate node: a flex item that is also a positioned container
+      // with absolute children. Set position:relative to establish a CB.
+      node.display = "flex";
+      node.position = "relative";
+      node.flexDirection = rng.nextChoice(["row", "column"] as const);
+      node.flexWrap = "nowrap";
+      node.width = rng.nextRange(100, 300);
+      node.height = rng.nextRange(80, 250);
+      node.flexGrow = rng.nextChoice([0, 1, 1]);
+      node.flexShrink = rng.nextChoice([0, 1]);
+    } else {
+      // Leaf: either a fixed child, nested absolute child, or normal flex item
+      const role = rng.nextRange(0, 2);
+      if (role === 0) {
+        // position:fixed — uses root as containing block
+        node.position = "fixed";
+        node.padding = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.margin = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.border = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.boxSizing = "border-box";
+        const strategy = rng.nextRange(0, 2);
+        if (strategy === 0) {
+          node.left = rng.nextRange(0, 80);
+          node.top = rng.nextRange(0, 80);
+          node.width = rng.nextRange(40, 120);
+          node.height = rng.nextRange(40, 120);
+        } else if (strategy === 1) {
+          node.right = rng.nextRange(0, 80);
+          node.bottom = rng.nextRange(0, 80);
+          node.width = rng.nextRange(40, 120);
+          node.height = rng.nextRange(40, 120);
+        } else {
+          node.left = rng.nextRange(10, 60);
+          node.right = rng.nextRange(10, 60);
+          node.top = rng.nextRange(10, 60);
+          node.bottom = rng.nextRange(10, 60);
+        }
+      } else if (role === 1) {
+        // position:absolute — uses nearest positioned ancestor (depth-1 node) as CB
+        node.position = "absolute";
+        node.padding = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.margin = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.border = { top: 0, right: 0, bottom: 0, left: 0 };
+        node.boxSizing = "border-box";
+        const strategy = rng.nextRange(0, 2);
+        if (strategy === 0) {
+          node.left = rng.nextRange(0, 60);
+          node.top = rng.nextRange(0, 60);
+          node.width = rng.nextRange(30, 100);
+          node.height = rng.nextRange(30, 100);
+        } else if (strategy === 1) {
+          node.right = rng.nextRange(0, 60);
+          node.bottom = rng.nextRange(0, 60);
+          node.width = rng.nextRange(30, 100);
+          node.height = rng.nextRange(30, 100);
+        } else {
+          node.left = rng.nextRange(5, 50);
+          node.right = rng.nextRange(5, 50);
+          node.top = rng.nextRange(5, 50);
+          node.bottom = rng.nextRange(5, 50);
+        }
+      } else {
+        // Normal in-flow flex item
+        node.width = rng.nextRange(30, 100);
+        node.height = rng.nextRange(30, 80);
+        node.flexGrow = rng.nextChoice([0, 1, 1]);
+        node.flexShrink = rng.nextChoice([0, 1]);
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -683,7 +785,11 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                 : rng.nextRange(3, 6) // other categories: 3-6 items
               : tier === 11
                 ? rng.nextRange(3, 6) // mix of in-flow and absolute children
-                : tier >= 2 && tier <= 5
+                : tier === 12
+                  ? depth === 2
+                    ? rng.nextRange(2, 4) // intermediates
+                    : rng.nextRange(2, 4) // mix of fixed/abs/in-flow leaves
+                  : tier >= 2 && tier <= 5
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
@@ -779,7 +885,7 @@ async function generateFixtures(
     }
 
     const depth =
-      tier === 7
+      tier === 7 || tier === 12
         ? 2
         : tier === 10
           ? tier10Config.maxDepth

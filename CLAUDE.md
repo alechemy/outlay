@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Tiers 1–11 are fully passing (100%, 1275/1275). Active work is on **Tier 12** (position:fixed, nested absolute positioning).
+Tiers 1–12 are fully passing (100%, 1375/1375). Phase 2 is complete.
 
 Performance targets are all met:
 
