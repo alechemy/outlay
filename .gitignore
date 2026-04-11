@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# test runner ephemeral output
+tests/last_run_failures.log

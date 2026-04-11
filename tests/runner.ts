@@ -23,10 +23,10 @@ function runTests() {
 
   const newlyPassedTests: string[] = [];
   let hasRegression = false;
+  const regressions: string[] = [];
 
   let passedFixtures = 0;
   let failedFixtures = 0;
-
   let totalErrorAcrossFailing = 0;
 
   const tierStats: Record<number, { passed: number; failed: number }> = {};
@@ -36,6 +36,7 @@ function runTests() {
     tier: number;
     nodeCount: number;
     meanError: number;
+    errors: string[];
   };
   const failingTestInfos: FailingTestInfo[] = [];
 
@@ -78,40 +79,40 @@ function runTests() {
     try {
       result = solveLayout(input);
     } catch (e) {
-      console.log(`❌ Fixture Errored: ${file}`);
-      console.error(e);
       failedFixtures++;
       tierStats[tier].failed++;
+      const errorMsg = e instanceof Error ? e.stack ?? e.message : String(e);
       if (lockedTests.includes(file)) {
         hasRegression = true;
-        console.error(
-          `🚨 REGRESSION DETECTED: ${file} was locked as passing but now throws an error!`,
-        );
+        regressions.push(file);
       }
-      totalErrorAcrossFailing += 1000; // Arbitrary high error for throwing
-      failingTestInfos.push({ file, tier, nodeCount, meanError: 1000 });
+      totalErrorAcrossFailing += 1000;
+      failingTestInfos.push({
+        file,
+        tier,
+        nodeCount,
+        meanError: 1000,
+        errors: [`  [EXCEPTION] ${errorMsg}`],
+      });
       continue;
     }
 
     let fixtureFailed = false;
     const errors: string[] = [];
-
     let testTotalError = 0;
     let testErrorCount = 0;
 
-    // Compare actual boxes against expected boxes
     for (const [nodeId, expectedBox] of Object.entries(expected)) {
       const actualBox = result.boxes.get(nodeId);
 
       if (!actualBox) {
         fixtureFailed = true;
         errors.push(`  [${nodeId}] Missing in solver output.`);
-        testTotalError += 1000; // Arbitrary large penalty for missing box
+        testTotalError += 1000;
         testErrorCount++;
         continue;
       }
 
-      // Flat numeric properties
       const flatProps = [
         "x",
         "y",
@@ -128,10 +129,8 @@ function runTests() {
         if (expectedVal === undefined) continue;
 
         const actualVal = (actualBox as any)[prop] as number;
-
         const safeExpected = expectedVal || 0;
         const safeActual = actualVal || 0;
-
         const diff = Math.abs(safeExpected - safeActual);
         testTotalError += diff;
         testErrorCount++;
@@ -144,7 +143,6 @@ function runTests() {
         }
       }
 
-      // Nested box model properties
       const nestedProps = ["padding", "border", "margin"] as const;
       const sides = ["top", "right", "bottom", "left"] as const;
 
@@ -156,10 +154,8 @@ function runTests() {
           if (expectedVal === undefined) continue;
 
           const actualVal = (actualBox as any)[prop]?.[side] as number;
-
           const safeExpected = expectedVal || 0;
           const safeActual = actualVal || 0;
-
           const diff = Math.abs(safeExpected - safeActual);
           testTotalError += diff;
           testErrorCount++;
@@ -182,23 +178,11 @@ function runTests() {
         testErrorCount > 0 ? testTotalError / testErrorCount : 0;
       totalErrorAcrossFailing += testMeanError;
 
-      console.log(`❌ Fixture Failed: ${file} (Tier ${tier}, Seed ${seed})`);
-      console.log(`   Mean Error for test: ${testMeanError.toFixed(4)}px`);
-      console.log(errors.join("\n"));
-      console.log("");
-
-      failingTestInfos.push({
-        file,
-        tier,
-        nodeCount,
-        meanError: testMeanError,
-      });
+      failingTestInfos.push({ file, tier, nodeCount, meanError: testMeanError, errors });
 
       if (lockedTests.includes(file)) {
         hasRegression = true;
-        console.error(
-          `🚨 REGRESSION DETECTED: ${file} was locked as passing but now fails!`,
-        );
+        regressions.push(file);
       }
     } else {
       passedFixtures++;
@@ -213,31 +197,64 @@ function runTests() {
   const passRate = totalTests > 0 ? passedFixtures / totalTests : 0;
   const meanFailingError =
     failedFixtures > 0 ? totalErrorAcrossFailing / failedFixtures : 0;
-
   const fitnessScore = passRate + 1 / (1 + meanFailingError);
 
-  console.log("--- Test Summary ---");
-  console.log(`Total:  ${totalTests}`);
-  console.log(`Passed: ${passedFixtures}`);
-  console.log(`Failed: ${failedFixtures}`);
-  console.log(`\nFitness Score: ${fitnessScore.toFixed(6)}`);
-  console.log(
-    `Mean Error Across Failing Tests: ${meanFailingError.toFixed(4)}px`,
-  );
+  // Sort failing tests by priority (tier, then node count, then error)
+  failingTestInfos.sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    if (a.nodeCount !== b.nodeCount) return a.nodeCount - b.nodeCount;
+    return a.meanError - b.meanError;
+  });
+
+  // Write detailed failure log
+  const failureLogPath = path.join(__dirname, "last_run_failures.log");
+  if (failingTestInfos.length > 0) {
+    const lines: string[] = [
+      `Test run: ${new Date().toISOString()}`,
+      `Failed: ${failedFixtures}/${totalTests}`,
+      "",
+    ];
+    for (const info of failingTestInfos) {
+      lines.push(
+        `❌ ${info.file} (Tier ${info.tier}, Nodes: ${info.nodeCount}, Mean Error: ${info.meanError.toFixed(4)}px)`,
+      );
+      lines.push(...info.errors);
+      lines.push("");
+    }
+    fs.writeFileSync(failureLogPath, lines.join("\n"), "utf-8");
+  } else if (fs.existsSync(failureLogPath)) {
+    fs.unlinkSync(failureLogPath);
+  }
+
+  // --- Concise console output ---
+
+  if (regressions.length > 0) {
+    console.log("\n🚨 REGRESSIONS DETECTED:");
+    for (const f of regressions) console.log(`   ${f}`);
+  }
+
+  console.log("\n--- Test Summary ---");
+  console.log(`Total:  ${totalTests}  |  Passed: ${passedFixtures}  |  Failed: ${failedFixtures}`);
+  console.log(`Fitness Score: ${fitnessScore.toFixed(6)}`);
+  console.log(`Mean Error Across Failing Tests: ${meanFailingError.toFixed(4)}px`);
+
+  // Tier breakdown (compact)
+  const tierNums = Object.keys(tierStats)
+    .map(Number)
+    .sort((a, b) => a - b);
+  const tierLine = tierNums
+    .map((t) => `T${t}: ${tierStats[t].passed}/${tierStats[t].passed + tierStats[t].failed}`)
+    .join("  ");
+  if (tierLine) console.log(`Tiers: ${tierLine}`);
 
   if (failingTestInfos.length > 0) {
-    console.log("\n--- Highest Priority Failing Tests ---");
-    failingTestInfos.sort((a, b) => {
-      if (a.tier !== b.tier) return a.tier - b.tier;
-      if (a.nodeCount !== b.nodeCount) return a.nodeCount - b.nodeCount;
-      return a.meanError - b.meanError;
-    });
-
+    console.log("\n--- Top Priority Failing Tests ---");
     for (const info of failingTestInfos.slice(0, 5)) {
       console.log(
-        `- ${info.file} (Tier ${info.tier}, Nodes: ${info.nodeCount}, Mean Error: ${info.meanError.toFixed(4)}px)`,
+        `  ${info.file} (Tier ${info.tier}, Nodes: ${info.nodeCount}, Mean Error: ${info.meanError.toFixed(4)}px)`,
       );
     }
+    console.log(`\n  Full details: tests/last_run_failures.log`);
   }
 
   if (!hasRegression && newlyPassedTests.length > 0) {
@@ -262,17 +279,24 @@ function runTests() {
     summary: summaryMessage,
   };
   fs.appendFileSync(trackerPath, JSON.stringify(entry) + "\n");
-  console.log(`\n📝 Appended run to tracker.jsonl`);
+  console.log(`📝 Appended run to tracker.jsonl`);
 
   if (hasRegression) {
     console.log(
-      "\n⚠️ Auto-reverting changes due to regression on locked test(s)...",
+      "\n⚠️ Regression detected on locked test(s). Stashing changes instead of discarding...",
     );
     try {
-      execSync("git checkout -- src/", { stdio: "inherit" });
-      console.log("✅ Reverted src/ directory to HEAD.");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const stashMessage = `regression-${timestamp}`;
+      execSync(`git stash push -m "${stashMessage}" -- src/`, {
+        stdio: "inherit",
+      });
+      console.log(`✅ Changes stashed as "${stashMessage}".`);
+      console.log(
+        `   To recover and refine: git stash pop  (or: git stash list)`,
+      );
     } catch (e) {
-      console.error("❌ Failed to auto-revert:", e);
+      console.error("❌ Failed to stash changes:", e);
     }
     process.exit(1);
   } else if (failedFixtures > 0) {

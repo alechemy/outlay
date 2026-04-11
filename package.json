@@ -6,7 +6,8 @@
   "scripts": {
     "test": "ts-node tests/runner.ts",
     "test:trace": "ts-node tests/trace-comparator.test.ts",
-    "generate": "ts-node tests/generator.ts"
+    "generate": "ts-node tests/generator.ts",
+    "probe": "ts-node scripts/probe-chromium.ts"
   },
   "keywords": [],
   "author": "",

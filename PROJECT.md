@@ -28,17 +28,20 @@ This cost shows up concretely in:
 ## Project Goals
 
 ### Primary Goal
+
 A library that correctly resolves **single-axis Flexbox layout** (the most common layout mode in modern web apps) for a tree of elements with known constraints, producing pixel-accurate\* box positions and dimensions.
 
 \*Pixel-accurate defined as: matching browser output within 0.5px for the supported CSS property subset (sub-pixel precision matters for cumulative error across many nodes).
 
 ### Secondary Goals (ordered by priority)
+
 1. CSS Grid layout (explicit grid, fixed and fractional tracks).
 2. Block flow layout (normal flow with margin collapsing).
 3. Basic intrinsic sizing (`min-content`, `max-content`, `fit-content`).
 4. Integration with Pretext.js for text-aware layout solving (i.e., "how tall is this flex item if it contains this paragraph of text at this width?").
 
 ### Non-Goals (explicitly out of scope)
+
 - Full CSS spec compliance. This is not a browser engine. The 80/20 subset is the target.
 - Rendering or painting. Output is a position/size map, not pixels.
 - Inline layout and line breaking (delegate to Pretext or browser).
@@ -67,9 +70,9 @@ interface LayoutNode {
   maxWidth?: number;
   minHeight?: number;
   maxHeight?: number;
-  padding: BoxSides;       // { top, right, bottom, left } in px
-  margin: BoxSides;        // supports "auto" for centering
-  border: BoxSides;        // widths only, in px
+  padding: BoxSides; // { top, right, bottom, left } in px
+  margin: BoxSides; // supports "auto" for centering
+  border: BoxSides; // widths only, in px
   boxSizing: "content-box" | "border-box";
 
   // Display and layout mode
@@ -78,19 +81,34 @@ interface LayoutNode {
   // Flex container properties (when display === "flex")
   flexDirection?: "row" | "column" | "row-reverse" | "column-reverse";
   flexWrap?: "nowrap" | "wrap" | "wrap-reverse";
-  justifyContent?: "flex-start" | "flex-end" | "center" | "space-between"
-                 | "space-around" | "space-evenly";
+  justifyContent?:
+    | "flex-start"
+    | "flex-end"
+    | "center"
+    | "space-between"
+    | "space-around"
+    | "space-evenly";
   alignItems?: "flex-start" | "flex-end" | "center" | "stretch" | "baseline";
-  alignContent?: "flex-start" | "flex-end" | "center" | "stretch"
-               | "space-between" | "space-around";
+  alignContent?:
+    | "flex-start"
+    | "flex-end"
+    | "center"
+    | "stretch"
+    | "space-between"
+    | "space-around";
   gap?: number | { row: number; column: number };
 
   // Flex item properties
-  flexGrow?: number;       // default 0
-  flexShrink?: number;     // default 1
+  flexGrow?: number; // default 0
+  flexShrink?: number; // default 1
   flexBasis?: number | "auto" | "content";
-  alignSelf?: "auto" | "flex-start" | "flex-end" | "center"
-            | "stretch" | "baseline";
+  alignSelf?:
+    | "auto"
+    | "flex-start"
+    | "flex-end"
+    | "center"
+    | "stretch"
+    | "baseline";
   order?: number;
 
   // Grid container properties (Phase 3)
@@ -101,7 +119,10 @@ interface LayoutNode {
   gridAutoFlow?: "row" | "column" | "row dense" | "column dense";
 
   // Grid item properties (Phase 3)
-  gridColumn?: { start: number | "auto"; end: number | "auto" | `span ${number}` };
+  gridColumn?: {
+    start: number | "auto";
+    end: number | "auto" | `span ${number}`;
+  };
   gridRow?: { start: number | "auto"; end: number | "auto" | `span ${number}` };
 
   // Children
@@ -110,7 +131,10 @@ interface LayoutNode {
   // Optional: intrinsic content size callback
   // For leaf nodes whose content size is externally determined
   // (e.g., text measured by Pretext)
-  measureContent?: (availableWidth: number) => { width: number; height: number };
+  measureContent?: (availableWidth: number) => {
+    width: number;
+    height: number;
+  };
 }
 
 type TrackDefinition =
@@ -128,6 +152,7 @@ interface BoxSides {
 ```
 
 #### Design decision: `boxSizing` is an input property.
+
 The solver accepts `boxSizing` and handles the conversion internally rather than requiring the caller to pre-resolve to content-box values. Rationale: nearly all modern CSS uses `border-box`, so forcing callers to convert would create a friction point and a common source of bugs at every integration site. The conversion math is trivial for the solver to handle.
 
 ### Output Format
@@ -151,12 +176,12 @@ interface ResolvedBox {
   // Resolved box model edges
   padding: BoxSides;
   border: BoxSides;
-  margin: BoxSides;  // includes resolved "auto" margins
+  margin: BoxSides; // includes resolved "auto" margins
 
   // Convenience computed values
   borderBoxWidth: number;
   borderBoxHeight: number;
-  outerWidth: number;   // borderBoxWidth + margin.left + margin.right
+  outerWidth: number; // borderBoxWidth + margin.left + margin.right
   outerHeight: number;
 }
 ```
@@ -167,11 +192,11 @@ The solver must match Chromium's layout output within 0.5px for all supported pr
 
 ### Performance Targets
 
-| Tree size | Nesting depth | Target | Context |
-|-----------|---------------|--------|---------|
-| 100 nodes | 2 levels | < 1ms | Animation frame budget |
-| 1,000 nodes | 3 levels | < 5ms | Drag operation budget |
-| 10,000 nodes | 5 levels | < 50ms | Design tool / SSR budget |
+| Tree size    | Nesting depth | Target | Context                  |
+| ------------ | ------------- | ------ | ------------------------ |
+| 100 nodes    | 2 levels      | < 1ms  | Animation frame budget   |
+| 1,000 nodes  | 3 levels      | < 5ms  | Drag operation budget    |
+| 10,000 nodes | 5 levels      | < 50ms | Design tool / SSR budget |
 
 These are median times on a 2022-era laptop (Apple M1 or equivalent x86). Measure with `performance.now()`, not `Date.now()`.
 
@@ -185,20 +210,21 @@ The flexbox layout algorithm is specified by the W3C as a series of numbered ste
 
 The required modules, mapped to spec sections:
 
-| Module | Spec Section | Responsibility |
-|--------|-------------|----------------|
-| `resolveBoxModel` | n/a (pre-processing) | Apply `boxSizing` conversion, resolve padding/border/margin to content-box math |
-| `determineFlexContainerSize` | 9.2 | Resolve the container's main and cross size from its constraints and context |
-| `collectFlexItems` | 9.2 | Gather children, apply `order`, handle `display: none` |
-| `determineMainSize` | 9.3 | Compute hypothetical main size of each flex item |
-| `collectIntoLines` | 9.3 | Single-line or multi-line collection based on `flex-wrap` and available main size |
-| `resolveFlexibleLengths` | 9.7 | The core flex algorithm: distribute free space or shrink overflow using grow/shrink factors with min/max clamping |
-| `resolveCrossSize` | 9.4 | Determine cross size of each item and each flex line |
-| `mainAxisAlignment` | 9.5 | Apply `justify-content` and auto margins on main axis |
-| `crossAxisAlignment` | 9.6 | Apply `align-items`, `align-self`, `align-content` |
-| `resolveAbsolutePositions` | Phase 2 | Handle `position: absolute/fixed` children |
+| Module                       | Spec Section         | Responsibility                                                                                                    |
+| ---------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `resolveBoxModel`            | n/a (pre-processing) | Apply `boxSizing` conversion, resolve padding/border/margin to content-box math                                   |
+| `determineFlexContainerSize` | 9.2                  | Resolve the container's main and cross size from its constraints and context                                      |
+| `collectFlexItems`           | 9.2                  | Gather children, apply `order`, handle `display: none`                                                            |
+| `determineMainSize`          | 9.3                  | Compute hypothetical main size of each flex item                                                                  |
+| `collectIntoLines`           | 9.3                  | Single-line or multi-line collection based on `flex-wrap` and available main size                                 |
+| `resolveFlexibleLengths`     | 9.7                  | The core flex algorithm: distribute free space or shrink overflow using grow/shrink factors with min/max clamping |
+| `resolveCrossSize`           | 9.4                  | Determine cross size of each item and each flex line                                                              |
+| `mainAxisAlignment`          | 9.5                  | Apply `justify-content` and auto margins on main axis                                                             |
+| `crossAxisAlignment`         | 9.6                  | Apply `align-items`, `align-self`, `align-content`                                                                |
+| `resolveAbsolutePositions`   | Phase 2              | Handle `position: absolute/fixed` children                                                                        |
 
 Each module has:
+
 - Its own unit test suite with targeted inputs and expected outputs.
 - Its own micro-benchmark.
 - A clear contract: input type, output type, and what properties it reads vs. modifies.
@@ -208,6 +234,7 @@ When the agent encounters a failing end-to-end test, it should trace the error t
 ### Phase 1: Pure TypeScript
 
 Start with readable TypeScript. No premature optimization. Priority order:
+
 1. Correctness (match Chromium).
 2. Clarity (each spec step maps to named code).
 3. Performance (only after correctness is solid).
@@ -215,6 +242,7 @@ Start with readable TypeScript. No premature optimization. Priority order:
 ### Phase 2: Optimization
 
 Profile against the benchmark suite. If the 5ms/1,000-node target is not met:
+
 1. First, optimize in TypeScript (avoid allocations in hot loops, use typed arrays for box data, flatten tree traversal into array iteration).
 2. If still insufficient, port the `resolveFlexibleLengths` inner loop to Rust/Wasm. This is typically the hottest code path since it iterates repeatedly until convergence.
 
@@ -229,6 +257,12 @@ CSS Grid track sizing (https://www.w3.org/TR/css-grid-1/#algo-track-sizing) is a
 ## Agent-Driven Refinement Protocol
 
 This section defines the exact workflow for autonomous agent-driven development. The agent should follow this protocol without human intervention, escalating only when it hits a decision point listed in the Open Questions section.
+
+> **Ground truth hierarchy — read this before anything else:**
+>
+> 1. **Fixture `expected` values are the ground truth.** They are measurements captured directly from Chromium via `getBoundingClientRect()`. They are not derived from the spec.
+> 2. **Chromium's behavior is the authority.** When a fixture doesn't cover a specific edge case, use `npm run probe` to render it in Chromium and observe the result.
+> 3. **The W3C spec is a secondary reference.** It is useful for understanding _why_ Chromium behaves a certain way, but Chromium does not implement the spec 1:1. When the spec and Chromium disagree, **always match Chromium**. Never argue with a fixture or probe result by citing the spec.
 
 ### The Iteration Loop
 
@@ -267,6 +301,7 @@ fitness = (number of passing tests / total tests in unlocked tiers)
 The first term dominates (0 to 1 range, representing pass rate). The second term (0 to 1 range) provides gradient signal between discrete pass/fail flips. A change that reduces mean error across failing tests from 4.1px to 3.2px improves the fitness score even if no test flips from fail to pass.
 
 The agent should log the fitness score after every iteration and maintain a running history. If the fitness score has not improved in 20 consecutive iterations, the agent should:
+
 1. Re-examine its current approach and try a fundamentally different strategy.
 2. If still stuck after 40 iterations, flag the specific failing test pattern for human review.
 
@@ -275,12 +310,14 @@ The agent should log the fitness score after every iteration and maintain a runn
 Tests are organized into numbered tiers. The agent begins at Tier 1 and advances only when the current tier has a 100% pass rate. Tests from all unlocked tiers are always run (regressions in earlier tiers block advancement).
 
 **Tier 1: Static sizing (no flex behavior)**
+
 - Fixed-width container, fixed-width children.
 - Box model math only: padding, border, margin, `boxSizing`.
 - Verifies that `resolveBoxModel` is correct in isolation.
 - Approximately 50 generated test cases.
 
 **Tier 2: Basic flex distribution (single axis, no wrapping)**
+
 - `flex-grow` only, no shrink, no min/max constraints.
 - Container has a definite main size. Children have `flex-basis: 0` or fixed basis.
 - `flex-direction: row` only.
@@ -288,6 +325,7 @@ Tests are organized into numbered tiers. The agent begins at Tier 1 and advances
 - Approximately 100 generated test cases.
 
 **Tier 3: Flex shrink and min/max clamping**
+
 - `flex-shrink` with overflow.
 - `minWidth` / `maxWidth` interacting with grow/shrink.
 - The clamping-and-refreeze loop in the flex algorithm (spec section 9.7, step 6).
@@ -295,30 +333,35 @@ Tests are organized into numbered tiers. The agent begins at Tier 1 and advances
 - Approximately 150 generated test cases.
 
 **Tier 4: Cross-axis alignment**
+
 - `align-items` and `align-self` variants.
 - Cross-size resolution (`stretch`, definite cross size, auto cross size).
 - `flex-direction: column` (swaps main/cross axes, tests that the solver is axis-agnostic).
 - Approximately 100 generated test cases.
 
 **Tier 5: justify-content and main-axis auto margins**
+
 - All `justify-content` variants.
 - `margin: auto` on main axis absorbing free space.
 - Interaction between `justify-content` and auto margins (auto margins take priority).
 - Approximately 75 generated test cases.
 
 **Tier 6: Flex wrapping**
+
 - `flex-wrap: wrap` and `wrap-reverse`.
 - Multi-line containers.
 - `align-content` for distributing space between lines.
 - Approximately 150 generated test cases.
 
 **Tier 7: Nested flex containers**
+
 - Flex items that are themselves flex containers.
 - Indefinite size resolution (a flex item's available space depends on its parent's flex algorithm, which depends on the item's intrinsic size, creating a circular dependency that the spec resolves with a specific procedure).
 - Percentage dimensions in nested contexts.
 - Approximately 200 generated test cases.
 
 **Tier 8: Intrinsic content sizing**
+
 - Leaf nodes with `measureContent` callbacks.
 - `flex-basis: content` and `flex-basis: auto` with intrinsic sizes.
 - `width: min-content` and `width: max-content` on flex items and containers.
@@ -326,12 +369,14 @@ Tests are organized into numbered tiers. The agent begins at Tier 1 and advances
 - Approximately 100 generated test cases.
 
 **Tier 9: Reverse and order**
+
 - `flex-direction: row-reverse`, `column-reverse`.
 - `order` property reordering items.
 - Verifies that visual order and layout order are correctly separated.
 - Approximately 50 generated test cases.
 
 **Tier 10: Edge cases and adversarial inputs**
+
 - Zero-size containers.
 - Deeply nested trees (10+ levels).
 - All flex items with `flex-grow: 0` and `flex-shrink: 0` (no flexibility).
@@ -375,25 +420,28 @@ When a test fails, the agent needs to determine which sub-algorithm is wrong. To
 ```typescript
 interface DebugTrace {
   // After resolveBoxModel
-  resolvedBoxModels: Map<string, {
-    contentWidth: number;
-    contentHeight: number;
-    paddingTop: number;
-    paddingRight: number;
-    paddingBottom: number;
-    paddingLeft: number;
-    borderTop: number;
-    borderRight: number;
-    borderBottom: number;
-    borderLeft: number;
-    marginTop: number;
-    marginRight: number;
-    marginBottom: number;
-    marginLeft: number;
-  }>;
+  resolvedBoxModels: Map<
+    string,
+    {
+      contentWidth: number;
+      contentHeight: number;
+      paddingTop: number;
+      paddingRight: number;
+      paddingBottom: number;
+      paddingLeft: number;
+      borderTop: number;
+      borderRight: number;
+      borderBottom: number;
+      borderLeft: number;
+      marginTop: number;
+      marginRight: number;
+      marginBottom: number;
+      marginLeft: number;
+    }
+  >;
 
   // After collectFlexItems
-  flexItemOrder: string[];  // item IDs in resolved order
+  flexItemOrder: string[]; // item IDs in resolved order
 
   // After determineMainSize
   hypotheticalMainSizes: Map<string, number>;
@@ -429,11 +477,13 @@ If the fitness score plateaus (no improvement for 20 iterations), the agent shou
 
 2. **Reference comparison**: For the failing case, run a known-correct implementation (Yoga or Taffy via Wasm) and compare intermediate values. This can reveal whether the issue is a misunderstanding of the spec or a math error.
 
-3. **Spec re-reading**: Re-read the specific section of the W3C spec that governs the failing step. The spec is the ground truth; Chromium's behavior is the target, but the spec explains why Chromium behaves that way. Sometimes the spec reveals a step or edge case that was missed entirely.
+3. **Chromium probing**: Use `npm run probe` to render a minimal reproduction of the failing case directly in Chromium and observe what it actually does. Chromium's output is the ground truth — not the W3C spec. Chromium does not implement the spec 1:1; when they disagree, match Chromium. The spec is useful for understanding _why_ Chromium behaves a certain way, but it is never authoritative over a fixture or a probe result.
 
-4. **Architectural pivot**: If the module's approach is fundamentally wrong (e.g., it's trying to resolve flex lengths in a single pass when the spec requires iterative clamping), restructure the module rather than patching it.
+4. **Spec re-reading**: After confirming Chromium's actual behavior via probing, re-read the relevant spec section to understand the intended algorithm. Sometimes this reveals a missed step or edge case — but always validate against Chromium output, not spec language.
 
-5. **Escalate**: After 40 iterations with no improvement, save the failing test cases, the current intermediate value traces, and a summary of attempted approaches. Flag for human review.
+5. **Architectural pivot**: If the module's approach is fundamentally wrong (e.g., it's trying to resolve flex lengths in a single pass when the spec requires iterative clamping), restructure the module rather than patching it.
+
+6. **Escalate**: After 40 iterations with no improvement, save the failing test cases, the current intermediate value traces, and a summary of attempted approaches. Flag for human review.
 
 ---
 
@@ -442,27 +492,32 @@ If the fitness score plateaus (no improvement for 20 iterations), the agent shou
 Before writing any layout algorithm code, the agent must build the infrastructure that makes iterative refinement possible. This is the required startup sequence:
 
 ### Step 1: Test Harness (iterations 1-5)
+
 - Build the fixture runner: reads JSON fixtures, runs the solver, compares output, reports per-test pass/fail and per-property error magnitude.
 - Build the Chromium-based generator: takes a tier definition (parameter space), generates random layout trees, renders them in headless Chromium via Puppeteer, captures `getBoundingClientRect()` for every element, writes fixture files.
 - Generate the Tier 1 fixture corpus (50 tests).
 - Verify the harness works by running it against a trivial stub solver that returns all zeros. Confirm it correctly reports failures with accurate error magnitudes.
 
 ### Step 2: Fitness Metric and Iteration Tracker (iterations 6-7)
+
 - Implement the fitness score calculator.
 - Build the iteration log: after each run, append an entry with timestamp, fitness score, number of passing/failing tests per tier, and a one-line summary of what changed.
 - Build the regression lock: track which tests have previously passed, auto-revert changes that break locked tests.
 
 ### Step 3: Debug Trace Infrastructure (iterations 8-10)
+
 - Add the `DebugTrace` interface to the solver's API.
 - Wire up the trace logger so that every module boundary emits intermediate values.
 - Build a trace comparator that takes two traces (solver vs. reference) and reports the first point of divergence.
 
 ### Step 4: Prior Art Evaluation (iterations 11-15)
+
 - Convert 50 of Yoga's simplest test cases to fixture format. Run through Chromium to verify they produce the expected output. Report how many are directly usable.
 - Compile Taffy to Wasm. Run Tier 1 and Tier 2 fixtures against it. Report accuracy, bundle size, and API friction. Write a short recommendation: wrap Taffy or build from scratch.
 - Convert a sample of web-platform-tests flexbox tests to fixture format. Assess conversion difficulty and coverage overlap with the generated tests.
 
 ### Step 5: Begin Algorithm Implementation (iteration 16+)
+
 - Only now start implementing the layout solver, beginning with Tier 1 (box model math).
 - Follow the iteration loop defined in the Refinement Protocol.
 
@@ -487,7 +542,7 @@ Each fixture is a JSON file:
   "tier": 3,
   "seed": 48291,
   "description": "flex-shrink with minWidth clamping, 3 items, row direction",
-  "input": { "/* LayoutNode tree */" : true },
+  "input": { "/* LayoutNode tree */": true },
   "expected": {
     "node-1": { "x": 0, "y": 0, "width": 200, "height": 100 },
     "node-2": { "x": 200, "y": 0, "width": 150, "height": 100 }
@@ -507,6 +562,29 @@ generate-tests --tier 3 --count 50 --override "flexShrink=range(0.5,3.0)" --over
 
 This lets the agent explore a narrow region of the parameter space intensively when it's debugging a specific interaction.
 
+### Ad-hoc Chromium Probing
+
+When debugging a specific failure, use `npm run probe` to render arbitrary HTML or a LayoutNode tree directly in Chromium and read back the computed box values. This is the fastest way to test a hypothesis about Chromium's behavior without generating a full fixture.
+
+```bash
+# Pipe an HTML snippet via stdin
+echo '<div id="root-node" style="display:flex; width:300px">...' | npm run probe
+
+# Re-render an existing fixture and diff against its saved expected values
+npm run probe -- --fixture fixtures/tier-3-30042.json
+
+# Render a LayoutNode JSON file (same format as fixture "input")
+npm run probe -- --json path/to/node.json
+
+# Render an HTML file
+npm run probe -- --file path/to/snippet.html
+
+# Get raw JSON output (pipe into jq, save as a new fixture, etc.)
+npm run probe -- --fixture fixtures/tier-3-30042.json --json-out
+```
+
+The `--fixture` mode is especially useful for verifying that a saved fixture still matches the current Chromium version.
+
 ### Benchmark Suite
 
 A separate benchmark runs on every 10th iteration (not every iteration, to save time). It tracks:
@@ -521,13 +599,73 @@ The agent should not optimize for performance until Tier 7 is fully passing. Pre
 
 ## Prior Art
 
-| Project | What to Learn | Watch Out For |
-|---------|---------------|---------------|
-| **Yoga** (Facebook) | Architecture, test suite, edge case handling for flexbox. Yoga has thousands of generated test cases that can serve as fixtures after format conversion. | Intentional spec deviations for cross-platform consistency. When Yoga and Chromium disagree, this project follows Chromium. |
-| **Pretext.js** (Cheng Lou) | Development methodology (agent-driven refinement), API design philosophy, prepare/layout split. | Text-only; no layout solving. The methodology is what matters, not the code. |
-| **Taffy** (Rust) | Modern Rust flexbox/grid implementation with good spec compliance. Evaluate as a potential Wasm starting point for Phase 2. | Rust-native API. Evaluate Wasm bundle size and whether its spec compliance is close enough to justify wrapping rather than reimplementing. |
-| **web-platform-tests** (W3C) | Thousands of official CSS flexbox and grid test cases. | HTML-based; need automated conversion to the solver's input format. Many test CSS features outside this project's scope. |
-| **Stretch** (Vislyhq, archived) | Earlier Rust flexbox engine. Yoga-compatible test suite. | Archived, known spec compliance gaps. |
+| Project                         | What to Learn                                                                                                                                            | Watch Out For                                                                                                                              |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Yoga** (Facebook)             | Architecture, test suite, edge case handling for flexbox. Yoga has thousands of generated test cases that can serve as fixtures after format conversion. | Intentional spec deviations for cross-platform consistency. When Yoga and Chromium disagree, this project follows Chromium.                |
+| **Pretext.js** (Cheng Lou)      | Development methodology, API design philosophy, and several directly applicable algorithmic patterns (see **Pretext Reference Guide** below).            | Text-only; no flexbox solving. Adapt patterns conceptually — don't import code.                                                            |
+| **Taffy** (Rust)                | Modern Rust flexbox/grid implementation with good spec compliance. Evaluate as a potential Wasm starting point for Phase 2.                              | Rust-native API. Evaluate Wasm bundle size and whether its spec compliance is close enough to justify wrapping rather than reimplementing. |
+| **web-platform-tests** (W3C)    | Thousands of official CSS flexbox and grid test cases.                                                                                                   | HTML-based; need automated conversion to the solver's input format. Many test CSS features outside this project's scope.                   |
+| **Stretch** (Vislyhq, archived) | Earlier Rust flexbox engine. Yoga-compatible test suite.                                                                                                 | Archived, known spec compliance gaps.                                                                                                      |
+
+---
+
+## Pretext Reference Guide
+
+Pretext (`pretext/`) is a DOM-independent text measurement library cloned into this repo as a reference. It solves a structurally similar problem: extract a historically DOM-dependent computation (text line-breaking) into a pure-arithmetic layer that matches browser output. Its architecture and several specific algorithms translate directly to flexbox layout.
+
+**What Pretext does**: Given a string and a font, `prepare(text, font)` segments and measures the text once. Then `layout(prepared, maxWidth)` does pure arithmetic line-breaking with no DOM reads, producing line count and height in ~0.0002ms. The expensive work is done once and cached; all subsequent size queries are arithmetic-only.
+
+### Patterns Worth Studying
+
+**1. Intrinsic size as a degenerate layout pass** (`pretext/src/line-break.ts`)
+
+Pretext computes `min-content` / `max-content` / `fit-content` widths by calling the same line-breaking algorithm with different width constraints — not a separate code path:
+
+```typescript
+// min-content: break at every opportunity
+measureNaturalWidth(prepared); // calls layout with maxWidth = Infinity
+
+// max-content: never break (except hard breaks)
+// → widest line in the output is the max-content width
+```
+
+Apply this directly in `determineMainSize` (Tier 8): when a flex item has `width: min-content` or `width: max-content`, call `solveLayout` on the subtree with `width: Infinity` and read the result's extent — don't write a separate intrinsic-sizing code path.
+
+**2. Non-materializing walkers** (`pretext/src/line-break.ts`, `walkPreparedLinesRaw`)
+
+Many Pretext APIs compute statistics (line count, widest line, overflow) without building line objects:
+
+```typescript
+walkLineRanges(prepared, maxWidth, (onLine) => {
+  // receives: { width, start, end } — no string allocation
+});
+```
+
+Apply this to the flex length resolution loop (`resolveFlexibleLengths`): the iterative clamping loop (spec §9.7 step 6) runs many tentative passes. Implement a "probe" variant that computes free space distribution and identifies frozen items without writing final positions, then commit positions only once the loop converges. This avoids allocating intermediate box objects per iteration.
+
+**3. Two-phase separation: measure once, layout fast** (`pretext/src/layout.ts`)
+
+Pretext's `prepare()` does all expensive work (canvas measurement, segmentation, caching) before the hot path. The `layout()` call is pure arithmetic.
+
+The equivalent here is separating the `measureContent` callback resolution phase from the positioning phase. Call all `measureContent` callbacks and cache their results before the flex algorithm starts. Never call them during the iterative clamping loop. See `pretext/src/measurement.ts` for how the segment metrics cache (`Map<font, Map<segment, metrics>>`) keeps cache granularity small while maximizing reuse.
+
+**4. Handling browser quirks explicitly** (`pretext/src/measurement.ts`, `EngineProfile`)
+
+Pretext detects Chromium vs. Safari vs. Firefox at startup and stores the differences in an `EngineProfile` struct (`lineFitEpsilon`, `preferPrefixWidthsForBreakableRuns`, etc.), then threads it through all layout calls. It does not try to write one algorithm that works everywhere — it branches on the profile.
+
+This project targets Chromium specifically, but the same pattern applies when Chromium's behavior diverges from the spec in a documented way: encode the deviation as a named constant or flag rather than a magic number buried in an expression. When you're stuck on a fixture and can't reconcile the spec with Chromium's output, the answer is usually a Chromium-specific behavior that needs to be named and encoded the way Pretext names `lineFitEpsilon`.
+
+**5. Accuracy snapshots as regression gates** (`pretext/accuracy/`)
+
+Pretext maintains `accuracy/chrome.json`, `accuracy/safari.json`, `accuracy/firefox.json` — pre-computed expected output for a matrix of fonts × sizes × widths × texts. These are committed to the repo. CI fails if the algorithm changes produce different values.
+
+This is exactly the `tests/locked_tests.json` + fixture approach used here. If you need to validate that a change affects only the right cases, look at how `pretext/pages/accuracy.ts` sweeps the parameter space and compares against the stored snapshots.
+
+### Where Not to Look
+
+- `pretext/src/analysis.ts` — text segmentation and script-specific rules (CJK, Arabic, Thai). Interesting but not relevant to layout.
+- `pretext/src/bidi.ts` — Unicode bidirectional algorithm. Not applicable.
+- `pretext/src/rich-inline.ts` — inline flow with atomic items and per-item padding. Useful only if implementing inline layout (out of scope for Phase 1).
 
 ---
 
