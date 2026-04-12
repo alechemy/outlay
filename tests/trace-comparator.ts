@@ -1,4 +1,4 @@
-import { DebugTrace, ResolvedBox, ResolvedBoxModel } from "./types";
+import { DebugTrace, ResolvedBox, ResolvedBoxModel } from "../src/types";
 
 export interface Divergence {
   stage: string;

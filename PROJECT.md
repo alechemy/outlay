@@ -304,27 +304,79 @@ Tests are organized into numbered tiers of increasing difficulty. All unlocked t
 
 ## Deliverables by Phase
 
-### Phase 1 (Core Flex, Tiers 1-10)
+### Phase 1 (Core Flex, Tiers 1-10) — Complete
 
-- [ ] Test harness: fixture runner, Chromium-based generator, fitness metric
-- [ ] Debug trace infrastructure with trace comparator
-- [ ] Iteration log with regression lock
-- [ ] Yoga/web-platform-tests fixture conversion pipeline
-- [ ] Taffy evaluation report with recommendation
-- [ ] TypeScript solver passing Tiers 1-7 at 100%
-- [ ] TypeScript solver passing Tiers 8-10 at 100%
-- [ ] Benchmark suite with per-module profiling
-- [ ] npm-publishable package with zero runtime dependencies
+- [x] Test harness: fixture runner, Chromium-based generator, fitness metric
+- [x] Debug trace infrastructure with trace comparator
+- [x] Iteration log with regression lock
+- [x] TypeScript solver passing Tiers 1-7 at 100%
+- [x] TypeScript solver passing Tiers 8-10 at 100%
+- [x] Benchmark suite with per-module profiling
 
-### Phase 2 (Performance + Positioning)
+Deprioritized from Phase 1:
 
-- [ ] Performance optimization pass (must hit 5ms/1,000-node target)
-- [ ] Wasm port of hot path if TypeScript optimization is insufficient
-- [ ] `position: absolute` and `position: fixed` layout resolution (new tiers 11-12)
-- [ ] Integration example with Pretext.js for text-aware layout
-- [ ] `margin: auto` centering in both axes
+- Yoga/web-platform-tests fixture conversion pipeline — Chromium-based fixture generator proved sufficient; conversion pipeline adds little value now.
+- Taffy evaluation report — TypeScript solver met all performance targets without a Wasm port, making Taffy wrapping moot.
 
-### Phase 3 (Grid)
+### Phase 2 (Performance + Positioning) — Complete
+
+- [x] Performance optimization pass (all targets met: 100 nodes ~0.06ms, 1k nodes ~1.1ms, 10k nodes ~14ms)
+- [x] `position: absolute` and `position: fixed` layout resolution (Tiers 11-12, 1375/1375 passing)
+- [x] `margin: auto` centering in both axes
+
+Not needed:
+
+- Wasm port of hot path — TypeScript met all performance targets with large margin.
+
+Deferred to post-v1:
+
+- Integration example with Pretext.js for text-aware layout.
+
+### v1 Release Readiness
+
+The solver is correct and fast. What remains is packaging it for consumption as an npm library. These items follow Pretext's shipping pattern: ESM + `.d.ts` via plain `tsc`, zero runtime deps, a smoke test against the actual tarball.
+
+#### 1. Build system and package shape (blocking)
+
+The solver currently runs via `ts-node` with no `dist/` output. Ship ESM + type declarations the same way Pretext does:
+
+- `tsconfig.build.json` targeting `dist/`, ESM output, declaration emit. Exclude `tests/`, `scripts/`, `fixtures/`.
+- `package.json`: `"type": "module"`, `exports` map (`.` → `dist/index.js` + `dist/index.d.ts`), `files` array excluding test/fixture/script artifacts from the tarball.
+- `src/index.ts` as the public entry point. Exports: `solveLayout`, `LayoutNode`, `ResolvedBox`, `LayoutResult`, `BoxSides`.
+- Move `src/trace-comparator.ts` out of `src/` — it is test infrastructure, not library code.
+
+#### 2. Zero runtime dependencies (blocking)
+
+`htmlparser2` and `taffy-layout` are currently in `dependencies` but are only imported by `scripts/evaluate-taffy.ts` and `scripts/convert-yoga-tests.ts`. Move both to `devDependencies`. The published solver must have zero runtime dependencies — enforce this structurally by ensuring `src/` imports nothing from `node_modules`.
+
+#### 3. README with API docs (blocking)
+
+Following Pretext's README structure:
+
+- Full `LayoutNode` and `ResolvedBox` type signatures.
+- Minimal usage example: build a tree, call `solveLayout`, read positions.
+- "Non-goals" section (no CSS parsing, no rendering, no floats, no tables — restating what is already in this document's Non-Goals).
+- Note that fixtures were captured from Chromium and that re-generating requires a local Chromium install via Puppeteer.
+- Accuracy and performance claims with the numbers from the benchmark suite.
+
+#### 4. Package smoke test (blocking)
+
+A script that runs `npm pack`, installs the tarball into a temp directory, imports the public API, calls `solveLayout` with a trivial tree, and asserts the output is correct. This catches build/export issues that the test suite cannot. See `pretext/scripts/package-smoke-test.ts` for the pattern.
+
+#### 5. Package metadata (blocking)
+
+- `package.json`: fill in `description`, `keywords`, `author`, `repository`, `license`.
+- Add a `LICENSE` file (currently missing — `package.json` says ISC but no file exists).
+
+#### Deprioritized for v1
+
+- **Dual CJS+ESM build** — ESM-only is sufficient. Same decision Pretext made.
+- **CSS Grid (Phase 3)** — explicitly post-v1 per this document.
+- **Pretext integration example** — useful demo but not a shipping blocker.
+- **Multi-browser baselines** — Chromium-only is correct per the ground truth hierarchy.
+- **CI/CD pipeline** — can be added after the initial publish.
+
+### Phase 3 (Grid) — Post-v1
 
 - [ ] CSS Grid track sizing algorithm (explicit grid)
 - [ ] Grid item placement (explicit and auto-placement)
@@ -336,12 +388,18 @@ Tests are organized into numbered tiers of increasing difficulty. All unlocked t
 
 ## Open Questions for Investigation
 
-1. **Percentage resolution in indefinite contexts.** When a flex item has `width: 50%` but the flex container has `width: auto`, browsers resolve this via a specific procedure. Generate 20 test cases exploring this interaction, document what Chromium does, and implement accordingly. Relevant at Tier 7.
+### Resolved
 
-2. **Baseline alignment feasibility.** `align-items: baseline` requires knowing the first baseline offset of each flex item's content. Investigate whether extending `measureContent` to return a `baseline` offset is sufficient. If complexity is high relative to usage frequency, defer to a later phase. Relevant at Tier 4.
+1. **Percentage resolution in indefinite contexts.** Resolved during Tier 7 implementation. Chromium's behavior is captured in the fixture corpus.
 
-3. **Yoga test suite reusability.** Automate conversion of Yoga's test format to fixture format. Run converted fixtures through Chromium to determine how many are directly usable vs. reflect Yoga-specific deviations.
+2. **Yoga test suite reusability.** Deprioritized. The Chromium-based fixture generator produces higher-fidelity ground truth than converted Yoga tests, which carry Yoga-specific deviations.
 
-4. **Taffy as a starting point.** Compile Taffy to Wasm and benchmark against the Tier 1-5 fixture corpus. Report accuracy, bundle size, and API ergonomics. Recommend: wrap Taffy or build from scratch.
+3. **Taffy as a starting point.** Resolved: build from scratch. The TypeScript solver meets all performance targets without Wasm, making Taffy wrapping unnecessary.
 
-5. **Sub-pixel rounding strategy.** Chromium rounds to 1/64th of a pixel internally. Investigate whether the solver needs to replicate this or whether the 0.5px tolerance absorbs the difference. Relevant when Tier 2 tests show consistent small errors.
+4. **Sub-pixel rounding strategy.** Resolved empirically. The 0.5px tolerance absorbs sub-pixel rounding differences. No Chromium-specific rounding replication was needed.
+
+### Open
+
+1. **Baseline alignment feasibility.** `align-items: baseline` requires knowing the first baseline offset of each flex item's content. Investigate whether extending `measureContent` to return a `baseline` offset is sufficient. If complexity is high relative to usage frequency, defer to a post-v1 phase.
+
+2. **Package naming.** Decide on the npm package name before first publish. Current `package.json` says `constraint-layout-algo` — evaluate whether a scoped name or shorter name is preferable.

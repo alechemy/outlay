@@ -1,11 +1,11 @@
 import { solveLayout } from "../src/solver";
-import { compareTraces } from "../src/trace-comparator";
 import {
-  BoxSides,
-  DebugTrace,
-  ResolvedBox,
-  ResolvedBoxModel,
+    BoxSides,
+    DebugTrace,
+    ResolvedBox,
+    ResolvedBoxModel,
 } from "../src/types";
+import { compareTraces } from "./trace-comparator";
 
 const ZERO_SIDES: BoxSides = { top: 0, right: 0, bottom: 0, left: 0 };
 

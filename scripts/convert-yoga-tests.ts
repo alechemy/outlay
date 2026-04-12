@@ -216,7 +216,7 @@ function toHTML(node: LayoutNode): string {
 }
 
 async function run() {
-  const fixturesDir = path.join(__dirname, "..", "fixtures", "yoga");
+  const fixturesDir = path.join(import.meta.dirname, "..", "fixtures", "yoga");
   if (!fs.existsSync(fixturesDir)) {
     fs.mkdirSync(fixturesDir, { recursive: true });
   }

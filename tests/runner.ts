@@ -4,7 +4,7 @@ import * as path from "path";
 import { solveLayout } from "../src/solver";
 
 function runTests() {
-  const fixturesDir = path.join(__dirname, "..", "fixtures");
+  const fixturesDir = path.join(import.meta.dirname, "..", "fixtures");
   if (!fs.existsSync(fixturesDir)) {
     console.error(`Fixtures directory not found: ${fixturesDir}`);
     process.exit(1);
@@ -16,7 +16,7 @@ function runTests() {
     process.exit(1);
   }
 
-  const lockedTestsPath = path.join(__dirname, "locked_tests.json");
+  const lockedTestsPath = path.join(import.meta.dirname, "locked_tests.json");
   const lockedTests: string[] = fs.existsSync(lockedTestsPath)
     ? JSON.parse(fs.readFileSync(lockedTestsPath, "utf-8"))
     : [];
@@ -207,7 +207,7 @@ function runTests() {
   });
 
   // Write detailed failure log
-  const failureLogPath = path.join(__dirname, "last_run_failures.log");
+  const failureLogPath = path.join(import.meta.dirname, "last_run_failures.log");
   if (failingTestInfos.length > 0) {
     const lines: string[] = [
       `Test run: ${new Date().toISOString()}`,
@@ -267,7 +267,7 @@ function runTests() {
     console.log(`\n🔒 Locked ${newlyPassedTests.length} new passing tests.`);
   }
 
-  const trackerPath = path.join(__dirname, "tracker.jsonl");
+  const trackerPath = path.join(import.meta.dirname, "tracker.jsonl");
   const summaryMessage = process.argv.slice(2).join(" ") || "Iteration run";
   const entry = {
     timestamp: new Date().toISOString(),

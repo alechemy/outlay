@@ -14,7 +14,7 @@ const TEST_FILES = [
 ];
 
 async function run() {
-  const fixturesDir = path.join(__dirname, "..", "fixtures", "wpt");
+  const fixturesDir = path.join(import.meta.dirname, "..", "fixtures", "wpt");
   if (!fs.existsSync(fixturesDir)) {
     fs.mkdirSync(fixturesDir, { recursive: true });
   }

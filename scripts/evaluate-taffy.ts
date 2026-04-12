@@ -7,8 +7,8 @@ async function run() {
   await Taffy.loadTaffy();
 
   const fixturesDirs = [
-    path.join(__dirname, "..", "fixtures"),
-    path.join(__dirname, "..", "fixtures", "yoga"),
+    path.join(import.meta.dirname, "..", "fixtures"),
+    path.join(import.meta.dirname, "..", "fixtures", "yoga"),
   ];
 
   let files: string[] = [];
@@ -208,7 +208,7 @@ async function run() {
     }
   }
 
-  const distDir = path.join(__dirname, "..", "node_modules", "taffy-layout");
+  const distDir = path.join(import.meta.dirname, "..", "node_modules", "taffy-layout");
   let wasmSize = 0;
 
   function findWasm(dir: string) {

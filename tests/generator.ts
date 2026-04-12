@@ -1052,7 +1052,7 @@ async function generateFixtures(
 }
 
 async function run() {
-  const fixturesDir = path.join(__dirname, "..", "fixtures");
+  const fixturesDir = path.join(import.meta.dirname, "..", "fixtures");
   if (!fs.existsSync(fixturesDir)) {
     fs.mkdirSync(fixturesDir, { recursive: true });
   }
