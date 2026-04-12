@@ -1,15 +1,43 @@
 import {
     BoxSides,
+    BoxSidesInput,
     DebugTrace,
     FlexLineInfo,
     LayoutNode,
     LayoutResultWithTrace,
+    MarginBoxSides,
+    MarginSidesInput,
+    NormalizedLayoutNode,
     ResolvedBox,
     ResolvedBoxModel,
     SolverOptions,
 } from "./types.js";
 
 const ZERO_SIDES: BoxSides = { top: 0, right: 0, bottom: 0, left: 0 };
+
+function normalizeSides(input: BoxSidesInput | undefined): BoxSides {
+  if (input === undefined) return { top: 0, right: 0, bottom: 0, left: 0 };
+  if (typeof input === "number") return { top: input, right: input, bottom: input, left: input };
+  return { top: input.top ?? 0, right: input.right ?? 0, bottom: input.bottom ?? 0, left: input.left ?? 0 };
+}
+
+function normalizeMargin(input: MarginSidesInput | undefined): MarginBoxSides {
+  if (input === undefined) return { top: 0, right: 0, bottom: 0, left: 0 };
+  if (typeof input === "number") return { top: input, right: input, bottom: input, left: input };
+  return { top: input.top ?? 0, right: input.right ?? 0, bottom: input.bottom ?? 0, left: input.left ?? 0 };
+}
+
+function normalizeNode(node: LayoutNode): NormalizedLayoutNode {
+  return {
+    ...node,
+    padding: normalizeSides(node.padding),
+    margin: normalizeMargin(node.margin),
+    border: normalizeSides(node.border),
+    boxSizing: node.boxSizing ?? "border-box",
+    display: node.display ?? "flex",
+    children: (node.children ?? []).map(normalizeNode),
+  };
+}
 
 function createTrace(): DebugTrace {
   return {
@@ -24,7 +52,7 @@ function createTrace(): DebugTrace {
   };
 }
 
-function resolveBoxModel(node: LayoutNode): ResolvedBoxModel {
+function resolveBoxModel(node: NormalizedLayoutNode): ResolvedBoxModel {
   let contentWidth = typeof node.width === "number" ? node.width : 0;
   let contentHeight = typeof node.height === "number" ? node.height : 0;
 
@@ -67,7 +95,7 @@ function resolveBoxModel(node: LayoutNode): ResolvedBoxModel {
   };
 }
 
-function collectFlexItems(node: LayoutNode): string[] {
+function collectFlexItems(node: NormalizedLayoutNode): string[] {
   return node.children
     .filter((child) => {
       if (child.display === "none") return false;
@@ -80,7 +108,7 @@ function collectFlexItems(node: LayoutNode): string[] {
 }
 
 function determineHypotheticalMainSize(
-  child: LayoutNode,
+  child: NormalizedLayoutNode,
   boxModel: ResolvedBoxModel,
   isRow: boolean,
 ): number {
@@ -177,9 +205,9 @@ function collectIntoLines(
  * mode: "min-content" uses flex-base-size; "max-content" uses max(flex-base, item max-content) for growable items.
  */
 function computeIntrinsicContentSize(
-  node: LayoutNode,
+  node: NormalizedLayoutNode,
   dimension: "width" | "height",
-  nodeMap: Map<string, LayoutNode>,
+  nodeMap: Map<string, NormalizedLayoutNode>,
   boxModelMap: Map<string, ResolvedBoxModel>,
   mode: "min-content" | "max-content" = "min-content",
 ): number {
@@ -378,6 +406,7 @@ export function solveLayout(
   root: LayoutNode,
   options?: SolverOptions,
 ): LayoutResultWithTrace {
+  const normalizedRoot = normalizeNode(root);
   const debug = options?.debug ?? false;
   const trace = debug ? createTrace() : undefined;
 
@@ -385,7 +414,7 @@ export function solveLayout(
     boxes: new Map<string, ResolvedBox>(),
   };
 
-  const nodeMap = new Map<string, LayoutNode>();
+  const nodeMap = new Map<string, NormalizedLayoutNode>();
   const boxModelMap = new Map<string, ResolvedBoxModel>();
 
   interface LineLayout {
@@ -405,7 +434,7 @@ export function solveLayout(
   let rootContainingBlock: ContainingBlockInfo;
 
   // Phase 1: Resolve box models for all nodes
-  function resolveAllBoxModels(node: LayoutNode) {
+  function resolveAllBoxModels(node: NormalizedLayoutNode) {
     nodeMap.set(node.id, node);
     const model = resolveBoxModel(node);
     boxModelMap.set(node.id, model);
@@ -416,10 +445,10 @@ export function solveLayout(
       resolveAllBoxModels(child);
     }
   }
-  resolveAllBoxModels(root);
+  resolveAllBoxModels(normalizedRoot);
 
   // Phase 2: Collect flex items (for flex containers)
-  function processNode(node: LayoutNode) {
+  function processNode(node: NormalizedLayoutNode) {
     if (node.display === "flex") {
       const itemOrder = collectFlexItems(node);
       if (trace) {
@@ -1119,10 +1148,10 @@ export function solveLayout(
       processNode(child);
     }
   }
-  processNode(root);
+  processNode(normalizedRoot);
 
   // Phase 7: Produce final boxes
-  function resolveAndEmitAbsolute(child: LayoutNode, cb: ContainingBlockInfo) {
+  function resolveAndEmitAbsolute(child: NormalizedLayoutNode, cb: ContainingBlockInfo) {
     const childModel = boxModelMap.get(child.id)!;
 
     const mL = child.margin.left === "auto" ? 0 : (child.margin.left as number);
@@ -1211,7 +1240,7 @@ export function solveLayout(
   }
 
   function emitBoxes(
-    node: LayoutNode,
+    node: NormalizedLayoutNode,
     borderBoxX: number,
     borderBoxY: number,
     inheritedCB: ContainingBlockInfo,
@@ -1299,9 +1328,8 @@ export function solveLayout(
       const containerCrossContentSize = isRow
         ? model.contentHeight
         : model.contentWidth;
-
       // Build child lookup by id
-      const childById = new Map<string, LayoutNode>();
+      const childById = new Map<string, NormalizedLayoutNode>();
       for (const child of node.children) {
         childById.set(child.id, child);
       }
@@ -1622,7 +1650,7 @@ export function solveLayout(
     }
   }
 
-  const rootModel = boxModelMap.get(root.id)!;
+  const rootModel = boxModelMap.get(normalizedRoot.id)!;
   const rootBorderBoxX = -(rootModel.borderLeft + rootModel.paddingLeft);
   const rootBorderBoxY = -(rootModel.borderTop + rootModel.paddingTop);
 
@@ -1636,7 +1664,7 @@ export function solveLayout(
       rootModel.contentHeight + rootModel.paddingTop + rootModel.paddingBottom,
   };
 
-  emitBoxes(root, rootBorderBoxX, rootBorderBoxY, rootContainingBlock);
+  emitBoxes(normalizedRoot, rootBorderBoxX, rootBorderBoxY, rootContainingBlock);
 
   if (trace) {
     result.trace = trace;

@@ -32,7 +32,8 @@
     "generate": "tsx tests/generator.ts",
     "probe": "tsx scripts/probe-chromium.ts",
     "bench": "tsx scripts/benchmark.ts",
-    "package-smoke-test": "tsx scripts/package-smoke-test.ts"
+    "package-smoke-test": "tsx scripts/package-smoke-test.ts",
+    "start": "vite"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
@@ -42,6 +43,7 @@
     "taffy-layout": "^2.0.3",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vite": "^8.0.8"
   }
 }

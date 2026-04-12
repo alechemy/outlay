@@ -26,26 +26,40 @@ export interface MarginBoxSides {
   left: number | "auto";
 }
 
+/** Shorthand: a number applies to all four sides, or specify per-side. */
+export type BoxSidesInput = number | Partial<BoxSides>;
+
+/** Shorthand: a number applies to all four sides, or specify per-side with optional "auto". */
+export type MarginSidesInput = number | Partial<MarginBoxSides>;
+
+/**
+ * Public input type for layout nodes.
+ *
+ * Only `id` is required. Defaults:
+ * - `padding`, `margin`, `border`: zero on all sides
+ * - `boxSizing`: `"border-box"`
+ * - `display`: `"flex"`
+ * - `children`: `[]`
+ *
+ * Padding, margin, and border accept a single number (all sides equal)
+ * or a partial object (unspecified sides default to zero).
+ */
 export interface LayoutNode {
-  // Identity
   id: string;
 
-  // Box model (all values in px, already resolved from CSS)
   width?: number | "auto" | "min-content" | "max-content";
   height?: number | "auto" | "min-content" | "max-content";
   minWidth?: number;
   maxWidth?: number;
   minHeight?: number;
   maxHeight?: number;
-  padding: BoxSides; // { top, right, bottom, left } in px
-  margin: MarginBoxSides; // supports "auto" for centering
-  border: BoxSides; // widths only, in px
-  boxSizing: "content-box" | "border-box";
+  padding?: BoxSidesInput;
+  margin?: MarginSidesInput;
+  border?: BoxSidesInput;
+  boxSizing?: "content-box" | "border-box";
 
-  // Display and layout mode
-  display: "flex" | "grid" | "block" | "none";
+  display?: "flex" | "grid" | "block" | "none";
 
-  // Flex container properties (when display === "flex")
   flexDirection?: "row" | "column" | "row-reverse" | "column-reverse";
   flexWrap?: "nowrap" | "wrap" | "wrap-reverse";
   justifyContent?:
@@ -65,9 +79,8 @@ export interface LayoutNode {
     | "space-around";
   gap?: number | { row: number; column: number };
 
-  // Flex item properties
-  flexGrow?: number; // default 0
-  flexShrink?: number; // default 1
+  flexGrow?: number;
+  flexShrink?: number;
   flexBasis?: number | "auto" | "content";
   alignSelf?:
     | "auto"
@@ -78,33 +91,100 @@ export interface LayoutNode {
     | "baseline";
   order?: number;
 
-  // Grid container properties (Phase 3)
   gridTemplateColumns?: TrackDefinition[];
   gridTemplateRows?: TrackDefinition[];
   gridAutoRows?: TrackSize;
   gridAutoColumns?: TrackSize;
   gridAutoFlow?: "row" | "column" | "row dense" | "column dense";
 
-  // Grid item properties (Phase 3)
   gridColumn?: {
     start: number | "auto";
     end: number | "auto" | `span ${number}`;
   };
   gridRow?: { start: number | "auto"; end: number | "auto" | `span ${number}` };
 
-  // Positioning
   position?: "static" | "relative" | "absolute" | "fixed";
   top?: number;
   right?: number;
   bottom?: number;
   left?: number;
 
-  // Children
-  children: LayoutNode[];
+  children?: LayoutNode[];
 
-  // Optional: intrinsic content size callback
-  // For leaf nodes whose content size is externally determined
-  // (e.g., text measured by Pretext)
+  measureContent?: (availableWidth: number) => {
+    width: number;
+    height: number;
+  };
+}
+
+/** Internal normalized form with all defaults resolved. */
+export interface NormalizedLayoutNode {
+  id: string;
+
+  width?: number | "auto" | "min-content" | "max-content";
+  height?: number | "auto" | "min-content" | "max-content";
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+  padding: BoxSides;
+  margin: MarginBoxSides;
+  border: BoxSides;
+  boxSizing: "content-box" | "border-box";
+
+  display: "flex" | "grid" | "block" | "none";
+
+  flexDirection?: "row" | "column" | "row-reverse" | "column-reverse";
+  flexWrap?: "nowrap" | "wrap" | "wrap-reverse";
+  justifyContent?:
+    | "flex-start"
+    | "flex-end"
+    | "center"
+    | "space-between"
+    | "space-around"
+    | "space-evenly";
+  alignItems?: "flex-start" | "flex-end" | "center" | "stretch" | "baseline";
+  alignContent?:
+    | "flex-start"
+    | "flex-end"
+    | "center"
+    | "stretch"
+    | "space-between"
+    | "space-around";
+  gap?: number | { row: number; column: number };
+
+  flexGrow?: number;
+  flexShrink?: number;
+  flexBasis?: number | "auto" | "content";
+  alignSelf?:
+    | "auto"
+    | "flex-start"
+    | "flex-end"
+    | "center"
+    | "stretch"
+    | "baseline";
+  order?: number;
+
+  gridTemplateColumns?: TrackDefinition[];
+  gridTemplateRows?: TrackDefinition[];
+  gridAutoRows?: TrackSize;
+  gridAutoColumns?: TrackSize;
+  gridAutoFlow?: "row" | "column" | "row dense" | "column dense";
+
+  gridColumn?: {
+    start: number | "auto";
+    end: number | "auto" | `span ${number}`;
+  };
+  gridRow?: { start: number | "auto"; end: number | "auto" | `span ${number}` };
+
+  position?: "static" | "relative" | "absolute" | "fixed";
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+
+  children: NormalizedLayoutNode[];
+
   measureContent?: (availableWidth: number) => {
     width: number;
     height: number;
