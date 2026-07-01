@@ -2,7 +2,12 @@
 
 ## Current Status
 
-Tiers 1–12 are fully passing (100%, 1375/1375). Phase 2 is complete.
+As of 2026-07-01:
+
+- **Solver**: Tiers 1–12 fully passing (100%, 1375/1375, re-verified). Phases 1–2 complete.
+- **Packaging**: v1 build, smoke test, and README exist, but the package is **not published to npm** (naming is an open question in PROJECT.md). The README's install instructions describe the post-publish state.
+- **Demos**: only the Layout Explorer is built (`pages/demos/explorer.html`, verified working). `DEMOS_PROMPT.md` specifies the remaining five demos.
+- **Phase 3 (CSS Grid)**: unstarted. `src/types.ts` declares grid properties, but the solver and the fixture generator have no grid support.
 
 Performance targets are all met:
 
@@ -11,6 +16,18 @@ Performance targets are all met:
 - 10,000 nodes / 5 levels: ~14ms (target <50ms)
 
 Run `npm run bench` to check performance. All other infrastructure (fixture runner, generator, regression lock, probe) is built.
+
+### One-time machine setup
+
+The probe and fixture generator launch Chrome via Puppeteer. If `npm run probe` fails with "Could not find Chrome", run:
+
+```bash
+npx puppeteer browsers install chrome
+```
+
+### Verifying browser work (demos)
+
+The chrome-devtools MCP server is available for driving a live browser (navigation, console messages, screenshots). Use it to verify demo and page work visually — never build browser UI blind. `npm start` serves the demos; vite's root is `pages/`, so the explorer is at `http://localhost:5173/demos/explorer.html`.
 
 ---
 
