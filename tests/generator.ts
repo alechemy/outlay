@@ -792,6 +792,45 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         node.flexBasis = rng.nextChoice([0, rng.nextRange(20, 100)]);
       }
     }
+  } else if (tier === 14) {
+    // Tier 14: minHeight/maxHeight — main-axis constraints in column trees,
+    // cross-axis constraints in row trees.
+    if (depth > 0) {
+      node.display = "flex";
+      node.flexDirection = rng.nextChoice(["row", "column"] as const);
+      node.flexWrap = rng.nextChoice([
+        "nowrap",
+        "nowrap",
+        "nowrap",
+        "wrap",
+      ] as const);
+      node.width = rng.nextRange(250, 600);
+      node.height = rng.nextRange(150, 450);
+      if (rng.next() < 0.5) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+      if (rng.next() < 0.3) {
+        node.justifyContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "space-between",
+        ] as const);
+      }
+    } else {
+      if (rng.next() < 0.6) node.height = rng.nextRange(30, 200);
+      if (rng.next() < 0.6) node.width = rng.nextRange(30, 150);
+      node.flexGrow = rng.nextChoice([0, 0, 1, 2]);
+      node.flexShrink = rng.nextChoice([0, 1, 1, 2]);
+      if (rng.next() < 0.4) node.flexBasis = rng.nextRange(40, 250);
+      if (rng.next() < 0.5) node.minHeight = rng.nextRange(20, 120);
+      if (rng.next() < 0.5) node.maxHeight = rng.nextRange(60, 250);
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -913,7 +952,7 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                       : tier13Config.category === 5
                         ? rng.nextRange(2, 4)
                         : rng.nextRange(2, 5)
-                    : tier >= 2 && tier <= 5
+                    : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
@@ -1026,7 +1065,11 @@ async function generateFixtures(
             ? tier13Config.category === 5
               ? 2
               : 1
-            : (tier >= 2 && tier <= 6) || tier === 8 || tier === 9 || tier === 11
+            : (tier >= 2 && tier <= 6) ||
+                tier === 8 ||
+                tier === 9 ||
+                tier === 11 ||
+                tier === 14
               ? 1
               : 2;
 
