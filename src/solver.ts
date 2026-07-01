@@ -39,6 +39,33 @@ function normalizeNode(node: LayoutNode): NormalizedLayoutNode {
   };
 }
 
+function clampCrossContent(
+  child: NormalizedLayoutNode,
+  value: number,
+  crossPaddingBorder: number,
+  isRow: boolean,
+): number {
+  const crossMin = isRow ? child.minHeight : child.minWidth;
+  const crossMax = isRow ? child.maxHeight : child.maxWidth;
+  if (crossMin === undefined && crossMax === undefined) return value;
+  let minCross = 0;
+  let maxCross = Infinity;
+  if (crossMin !== undefined) {
+    minCross =
+      child.boxSizing === "border-box"
+        ? Math.max(0, crossMin - crossPaddingBorder)
+        : crossMin;
+  }
+  if (crossMax !== undefined) {
+    maxCross =
+      child.boxSizing === "border-box"
+        ? Math.max(0, crossMax - crossPaddingBorder)
+        : crossMax;
+  }
+  if (maxCross < minCross) maxCross = minCross;
+  return Math.max(minCross, Math.min(maxCross, value));
+}
+
 function resolveGaps(
   node: NormalizedLayoutNode,
   isRow: boolean,
@@ -1004,9 +1031,13 @@ export function solveLayout(
               childModel.paddingRight +
               childModel.borderLeft +
               childModel.borderRight;
-          const crossContent = isRow
-            ? childModel.contentHeight
-            : childModel.contentWidth;
+          const child = nodeMap.get(childId)!;
+          const crossContent = clampCrossContent(
+            child,
+            isRow ? childModel.contentHeight : childModel.contentWidth,
+            crossPB,
+            isRow,
+          );
           const crossMarg = isRow
             ? childModel.marginTop + childModel.marginBottom
             : childModel.marginLeft + childModel.marginRight;
@@ -1153,33 +1184,16 @@ export function solveLayout(
             parentResolvedDims.get(childId)!.add(stretchDim);
           }
 
-          const crossMin = isRow ? child.minHeight : child.minWidth;
-          const crossMax = isRow ? child.maxHeight : child.maxWidth;
-          if (crossMin !== undefined || crossMax !== undefined) {
-            let minCross = 0;
-            let maxCross = Infinity;
-            if (crossMin !== undefined) {
-              minCross =
-                child.boxSizing === "border-box"
-                  ? Math.max(0, crossMin - crossPaddingBorder)
-                  : crossMin;
-            }
-            if (crossMax !== undefined) {
-              maxCross =
-                child.boxSizing === "border-box"
-                  ? Math.max(0, crossMax - crossPaddingBorder)
-                  : crossMax;
-            }
-            if (maxCross < minCross) maxCross = minCross;
-            const current = isRow
-              ? childModel.contentHeight
-              : childModel.contentWidth;
-            const clamped = Math.max(minCross, Math.min(maxCross, current));
-            if (isRow) {
-              childModel.contentHeight = clamped;
-            } else {
-              childModel.contentWidth = clamped;
-            }
+          const clamped = clampCrossContent(
+            child,
+            isRow ? childModel.contentHeight : childModel.contentWidth,
+            crossPaddingBorder,
+            isRow,
+          );
+          if (isRow) {
+            childModel.contentHeight = clamped;
+          } else {
+            childModel.contentWidth = clamped;
           }
 
           const crossSize = isRow
