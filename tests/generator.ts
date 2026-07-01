@@ -31,6 +31,13 @@ function genBoxSides(rng: RNG, max: number) {
 
 let idCounter = 1;
 let tier10Config = { category: 0, maxDepth: 1 };
+let tier13Config = { category: 0 };
+
+function genGap(rng: RNG): number | { row: number; column: number } {
+  return rng.next() < 0.5
+    ? rng.nextRange(0, 40)
+    : { row: rng.nextRange(0, 40), column: rng.nextRange(0, 40) };
+}
 
 function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
   const id = idCounter === 1 ? "root-node" : `node-${idCounter}`;
@@ -674,6 +681,117 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         node.flexShrink = rng.nextChoice([0, 1]);
       }
     }
+  } else if (tier === 13) {
+    // Tier 13: gap coverage.
+    // Category 0: row/column nowrap, grow under gap-reduced free space
+    // Category 1: shrink under gap-reduced space, min/max width constraints
+    // Category 2: wrap/wrap-reverse — gap in line breaking + row-gap between lines
+    // Category 3: reverse directions with justify-content
+    // Category 4: justify-content spacing values with inflexible items
+    // Category 5: nested containers with differing gaps (depth 2)
+    const { category } = tier13Config;
+    if (depth > 0) {
+      node.display = "flex";
+      node.gap = genGap(rng);
+      if (category === 0) {
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        node.width = rng.nextRange(300, 700);
+        node.height = rng.nextRange(200, 500);
+      } else if (category === 1) {
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        node.width = rng.nextRange(200, 450);
+        node.height = rng.nextRange(150, 400);
+      } else if (category === 2) {
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = rng.nextChoice(["wrap", "wrap-reverse"] as const);
+        node.width = rng.nextRange(200, 400);
+        node.height = rng.nextRange(200, 400);
+        node.alignContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+          "space-between",
+          "space-around",
+        ] as const);
+        if (rng.next() < 0.5) {
+          node.alignItems = rng.nextChoice([
+            "flex-start",
+            "flex-end",
+            "center",
+            "stretch",
+          ] as const);
+        }
+      } else if (category === 3) {
+        node.flexDirection = rng.nextChoice([
+          "row-reverse",
+          "column-reverse",
+        ] as const);
+        node.flexWrap = rng.nextChoice(["nowrap", "nowrap", "wrap"] as const);
+        node.width = rng.nextRange(250, 600);
+        node.height = rng.nextRange(200, 500);
+        node.justifyContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "space-between",
+          "space-around",
+          "space-evenly",
+        ] as const);
+      } else if (category === 4) {
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        node.width = rng.nextRange(350, 700);
+        node.height = rng.nextRange(300, 600);
+        node.justifyContent = rng.nextChoice([
+          "space-between",
+          "space-around",
+          "space-evenly",
+          "center",
+          "flex-end",
+        ] as const);
+      } else {
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        if (depth === 2) {
+          node.width = rng.nextRange(400, 800);
+          node.height = rng.nextRange(300, 600);
+        } else {
+          if (rng.next() < 0.5) node.width = rng.nextRange(100, 300);
+          if (rng.next() < 0.4) node.height = rng.nextRange(80, 250);
+          node.flexGrow = rng.nextChoice([0, 1, 1]);
+          node.flexShrink = rng.nextChoice([0, 1]);
+        }
+      }
+    } else {
+      if (category === 1) {
+        node.height = rng.nextRange(50, 150);
+        node.flexGrow = rng.nextChoice([0, 0, 1]);
+        node.flexShrink = rng.nextChoice([1, 1, 2, 3]);
+        node.flexBasis = rng.nextRange(80, 250);
+        if (rng.next() < 0.4) node.minWidth = rng.nextRange(20, 120);
+        if (rng.next() < 0.4) node.maxWidth = rng.nextRange(100, 350);
+      } else if (category === 2 || category === 3) {
+        node.width = rng.nextRange(40, 150);
+        node.height = rng.nextRange(30, 100);
+        node.flexGrow = rng.nextChoice([0, 0, 1]);
+        node.flexShrink = rng.nextChoice([0, 0, 1]);
+        if (rng.next() < 0.25) delete (node as any).height;
+      } else if (category === 4) {
+        node.width = rng.nextRange(30, 120);
+        node.height = rng.nextRange(30, 120);
+        node.flexGrow = 0;
+        node.flexShrink = 0;
+      } else {
+        node.width = rng.nextRange(30, 150);
+        node.height = rng.nextRange(30, 120);
+        node.flexGrow = rng.nextRange(0, 2);
+        node.flexShrink = rng.nextChoice([0, 1, 1]);
+        node.flexBasis = rng.nextChoice([0, rng.nextRange(20, 100)]);
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -789,7 +907,13 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                   ? depth === 2
                     ? rng.nextRange(2, 4) // intermediates
                     : rng.nextRange(2, 4) // mix of fixed/abs/in-flow leaves
-                  : tier >= 2 && tier <= 5
+                  : tier === 13
+                    ? tier13Config.category === 2 || tier13Config.category === 3
+                      ? rng.nextRange(4, 8) // enough items to force wrapping
+                      : tier13Config.category === 5
+                        ? rng.nextRange(2, 4)
+                        : rng.nextRange(2, 5)
+                    : tier >= 2 && tier <= 5
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
     for (let i = 0; i < numChildren; i++) {
@@ -825,6 +949,12 @@ function toHTML(node: LayoutNode): string {
     if (node.justifyContent)
       styles.push(`justify-content: ${node.justifyContent}`);
     if (node.alignContent) styles.push(`align-content: ${node.alignContent}`);
+    if (node.gap !== undefined)
+      styles.push(
+        typeof node.gap === "number"
+          ? `gap: ${node.gap}px`
+          : `gap: ${node.gap.row}px ${node.gap.column}px`,
+      );
   }
 
   if (node.alignSelf && node.alignSelf !== "auto")
@@ -883,15 +1013,22 @@ async function generateFixtures(
       tier10Config.category = i % 6;
       tier10Config.maxDepth = tier10Config.category === 1 ? 5 : 1;
     }
+    if (tier === 13) {
+      tier13Config.category = i % 6;
+    }
 
     const depth =
       tier === 7 || tier === 12
         ? 2
         : tier === 10
           ? tier10Config.maxDepth
-          : (tier >= 2 && tier <= 6) || tier === 8 || tier === 9 || tier === 11
-            ? 1
-            : 2;
+          : tier === 13
+            ? tier13Config.category === 5
+              ? 2
+              : 1
+            : (tier >= 2 && tier <= 6) || tier === 8 || tier === 9 || tier === 11
+              ? 1
+              : 2;
 
     const tree = genNode(rng, depth, tier);
 
@@ -913,6 +1050,10 @@ async function generateFixtures(
     `;
 
     await page.setContent(html);
+
+    // tsx's esbuild keepNames transform injects __name() calls into serialized
+    // evaluate callbacks; the helper doesn't exist in the page context.
+    await page.evaluate("globalThis.__name = globalThis.__name || ((f) => f);");
 
     const expected = await page.evaluate(() => {
       const rootEl = document.getElementById("root-node")!;
@@ -1095,4 +1236,7 @@ async function run() {
   console.log("Done.");
 }
 
-run().catch(console.error);
+run().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
