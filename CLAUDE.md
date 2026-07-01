@@ -38,6 +38,8 @@ npx puppeteer browsers install chrome
 
 The chrome-devtools MCP server is available for driving a live browser (navigation, console messages, screenshots). Use it to verify demo and page work visually — never build browser UI blind. `npm start` serves the demos; vite's root is `pages/`, so the explorer is at `http://localhost:5173/demos/explorer.html`.
 
+The explorer renders a live browser-CSS reference pane next to the solver pane and shows a match badge (`#match-status`) comparing them at 0.5px tolerance. `npm run verify:explorer` drives the demo's controls in headless Chromium (starts its own vite on port 5199) and fails if any step's badge reports a mismatch — run it after touching the demo or the solver.
+
 ---
 
 ## Ground Truth Hierarchy
