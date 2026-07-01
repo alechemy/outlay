@@ -288,6 +288,14 @@ Tests are organized into numbered tiers of increasing difficulty. All unlocked t
 
 **Tier 10: Edge cases and adversarial inputs** — Zero-size containers, deep nesting (10+ levels), all items non-flexible, negative margins, large values, `display: none` interleaved. ~200 fixtures.
 
+**Tier 11: Absolute positioning** — `position: absolute` children of flex containers, inset-based sizing. ~100 fixtures.
+
+**Tier 12: Fixed and nested absolute positioning** — `position: fixed` relative to root, absolute children of `position: relative` intermediates. ~100 fixtures.
+
+**Tier 13: Gap** — `gap` in number and `{ row, column }` forms: row/column/reverse directions, wrap line breaking and inter-line spacing, grow/shrink under gap-reduced free space, interaction with `justify-content`, nested containers with differing gaps. ~150 fixtures.
+
+**Tier 14: Min/max height constraints** — `minHeight`/`maxHeight` as main-axis constraints (column direction) and cross-axis constraints (row direction). ~100 fixtures.
+
 ---
 
 ## Prior Art
@@ -381,7 +389,7 @@ A script that runs `npm pack`, installs the tarball into a temp directory, impor
 - [ ] CSS Grid track sizing algorithm (explicit grid)
 - [ ] Grid item placement (explicit and auto-placement)
 - [ ] Mixed flex + grid trees
-- [ ] New tiers 13-18 covering grid-specific test cases
+- [ ] New tiers 15-20 covering grid-specific test cases (13-14 were taken by gap and min/max-height coverage)
 - [ ] Fitness metric extended to cover grid tiers
 
 ---

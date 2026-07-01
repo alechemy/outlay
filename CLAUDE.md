@@ -4,7 +4,7 @@
 
 As of 2026-07-01:
 
-- **Solver**: Tiers 1–12 fully passing (100%, 1375/1375, re-verified). **The pass rate only covers properties the generator emits** — see Known gaps below before trusting a "complete" claim.
+- **Solver**: Tiers 1–14 fully passing (100%, 1625/1625). Tier 13 covers `gap` (implemented 2026-07-01, including line breaking, free-space math, and inter-line spacing); Tier 14 locks `minHeight`/`maxHeight` on both axes. **The pass rate only covers properties the generator emits** — see Known gaps below before trusting a "complete" claim.
 - **Packaging**: v1 build, smoke test, and README exist, but the package is **not published to npm** (naming is an open question in PROJECT.md). The README's install instructions describe the post-publish state.
 - **Demos**: only the Layout Explorer is built (`pages/demos/explorer.html`, verified working). `DEMOS_PROMPT.md` specifies the remaining five demos.
 - **Phase 3 (CSS Grid)**: unstarted. `src/types.ts` declares grid properties, but the solver and the fixture generator have no grid support.
@@ -17,14 +17,14 @@ Performance targets are all met:
 
 Run `npm run bench` to check performance. All other infrastructure (fixture runner, generator, regression lock, probe) is built.
 
-### Known gaps (verified 2026-07-01)
+### Known gaps (verified 2026-07-01, post gap/min-max-height work)
 
-- **`gap` is unimplemented.** `src/solver.ts` never reads it, the generator never emits it, and zero fixtures cover it — yet `types.ts`, the README, and the explorer demo all claim it. On the demo's default tree the solver returns 139/198/139 where Chromium returns 135/190/135. Implementing `gap` (with generator support and a new fixture tier) is the top open solver task; fix the README claim if it ships without it.
-- **`align-items: baseline` is unimplemented** — accepted by the types, absent from the solver, zero fixtures. Tracked as an open question in PROJECT.md.
-- **`minHeight`/`maxHeight` have zero fixture coverage.** The generator only randomizes the width variants. A manual solver-vs-Chromium check passes, but the corpus does not lock this behavior.
-- **`npm run probe -- --json` crashes on shorthand box inputs** (`Cannot read properties of undefined (reading 'top')`): `toHTML` in `scripts/probe-chromium.ts` predates the number-shorthand support for `padding`/`margin`/`border` and requires full BoxSides objects.
+- **`align-items: baseline` is unimplemented** — accepted by the types, absent from the solver, zero fixtures. Tracked as an open question in PROJECT.md. The README notes this.
+- **`height: "min-content"` / `height: "max-content"` have zero fixture coverage.** The generator only emits keyword sizes for tier-8 container *widths* (~17 fixtures); keyword heights and keyword sizes on flex items are never generated, so the solver's behavior there is unlocked.
+- **Literal `"auto"` strings for `width`/`height`/`flexBasis` are never generated.** The solver treats any non-number as auto, so omission covers the same code path; this is a vocabulary-completeness note, not a correctness risk.
+- **Block containers with children are only covered as roots (Tier 1).** A `display: block` node with children nested inside a flex tree is never generated; the solver's block path (no margin collapse) is unlocked in that position.
 
-The general lesson: the fitness metric's coverage boundary is the generator's property vocabulary. When adding any property to `types.ts` or the README, add it to the generator first so fixtures can falsify the implementation.
+The general lesson: the fitness metric's coverage boundary is the generator's property vocabulary. When adding any property to `types.ts` or the README, add it to the generator first so fixtures can falsify the implementation. Tier 14 proved the point: locking `minHeight`/`maxHeight` immediately exposed three real solver bugs (cross-axis min/max clamping missing entirely, line cross sizes computed from unclamped values, and hypothetical main sizes unclamped during line breaking).
 
 ### One-time machine setup
 
