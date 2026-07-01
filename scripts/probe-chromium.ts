@@ -28,20 +28,32 @@ import * as path from "path";
 import puppeteer from "puppeteer";
 
 // Minimal LayoutNode → HTML converter (mirrors generator.ts toHTML)
+function normalizeSides(input: any): { top: number | "auto"; right: number | "auto"; bottom: number | "auto"; left: number | "auto" } {
+  if (input === undefined) return { top: 0, right: 0, bottom: 0, left: 0 };
+  if (typeof input === "number") return { top: input, right: input, bottom: input, left: input };
+  return { top: input.top ?? 0, right: input.right ?? 0, bottom: input.bottom ?? 0, left: input.left ?? 0 };
+}
+
 function toHTML(node: any): string {
   const s = (v: string | number | undefined, unit = "px") =>
     v !== undefined ? `${v}${typeof v === "number" ? unit : ""}` : null;
 
+  const padding = normalizeSides(node.padding);
+  const margin = normalizeSides(node.margin);
+  const border = normalizeSides(node.border);
+
   const styles: (string | null)[] = [
     s(node.width) && `width: ${s(node.width)}`,
     s(node.height) && `height: ${s(node.height)}`,
-    `padding: ${node.padding.top}px ${node.padding.right}px ${node.padding.bottom}px ${node.padding.left}px`,
-    `margin: ${node.margin.top === "auto" ? "auto" : node.margin.top + "px"} ${node.margin.right === "auto" ? "auto" : node.margin.right + "px"} ${node.margin.bottom === "auto" ? "auto" : node.margin.bottom + "px"} ${node.margin.left === "auto" ? "auto" : node.margin.left + "px"}`,
-    `border-width: ${node.border.top}px ${node.border.right}px ${node.border.bottom}px ${node.border.left}px`,
+    `padding: ${padding.top}px ${padding.right}px ${padding.bottom}px ${padding.left}px`,
+    `margin: ${margin.top === "auto" ? "auto" : margin.top + "px"} ${margin.right === "auto" ? "auto" : margin.right + "px"} ${margin.bottom === "auto" ? "auto" : margin.bottom + "px"} ${margin.left === "auto" ? "auto" : margin.left + "px"}`,
+    `border-width: ${border.top}px ${border.right}px ${border.bottom}px ${border.left}px`,
     `border-style: solid`,
     `border-color: transparent`,
-    `box-sizing: ${node.boxSizing ?? "content-box"}`,
-    `display: ${node.display ?? "block"}`,
+    `box-sizing: ${node.boxSizing ?? "border-box"}`,
+    `display: ${node.display ?? "flex"}`,
+    node.gap !== undefined &&
+      `gap: ${typeof node.gap === "number" ? `${node.gap}px` : `${node.gap.row}px ${node.gap.column}px`}`,
     node.flexDirection && `flex-direction: ${node.flexDirection}`,
     node.flexWrap && `flex-wrap: ${node.flexWrap}`,
     node.alignItems && `align-items: ${node.alignItems}`,
