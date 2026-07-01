@@ -545,6 +545,23 @@ export function solveLayout(
           mainSize = determineHypotheticalMainSize(child, childModel, isRow);
         }
 
+        // Hypothetical main size is the flex base clamped by main-axis
+        // min/max (spec 9.2 step 3); mainSize here includes padding+border.
+        const mainMin = isRow ? child.minWidth : child.minHeight;
+        const mainMax = isRow ? child.maxWidth : child.maxHeight;
+        if (mainMin !== undefined || mainMax !== undefined) {
+          let minMain = 0;
+          let maxMain = Infinity;
+          if (mainMin !== undefined) {
+            minMain = child.boxSizing === "border-box" ? mainMin : mainMin + pb;
+          }
+          if (mainMax !== undefined) {
+            maxMain = child.boxSizing === "border-box" ? mainMax : mainMax + pb;
+          }
+          if (maxMain < minMain) maxMain = minMain;
+          mainSize = Math.max(minMain, Math.min(maxMain, mainSize));
+        }
+
         hypoMainSizes.set(childId, mainSize);
         if (trace) {
           trace.hypotheticalMainSizes.set(childId, mainSize);
