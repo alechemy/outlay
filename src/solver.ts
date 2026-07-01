@@ -39,6 +39,16 @@ function normalizeNode(node: LayoutNode): NormalizedLayoutNode {
   };
 }
 
+function resolveGaps(
+  node: NormalizedLayoutNode,
+  isRow: boolean,
+): { main: number; cross: number } {
+  if (node.gap === undefined) return { main: 0, cross: 0 };
+  const row = typeof node.gap === "number" ? node.gap : node.gap.row;
+  const column = typeof node.gap === "number" ? node.gap : node.gap.column;
+  return isRow ? { main: column, cross: row } : { main: row, cross: column };
+}
+
 function createTrace(): DebugTrace {
   return {
     resolvedBoxModels: new Map(),
@@ -155,6 +165,7 @@ function collectIntoLines(
   isRow: boolean,
   availableMainSize: number,
   wrap: boolean,
+  mainGap: number,
 ): FlexLineInfo[] {
   if (!wrap || itemIds.length === 0) {
     let totalMainSize = 0;
@@ -165,6 +176,7 @@ function collectIntoLines(
         : model.marginTop + model.marginBottom;
       totalMainSize += (hypotheticalMainSizes.get(id) ?? 0) + margin;
     }
+    totalMainSize += mainGap * Math.max(0, itemIds.length - 1);
     return [{ itemIds: [...itemIds], mainSize: totalMainSize }];
   }
 
@@ -182,14 +194,14 @@ function collectIntoLines(
 
     if (
       currentLineIds.length > 0 &&
-      currentLineSize + outerHypo > availableMainSize
+      currentLineSize + mainGap + outerHypo > availableMainSize
     ) {
       lines.push({ itemIds: currentLineIds, mainSize: currentLineSize });
       currentLineIds = [id];
       currentLineSize = outerHypo;
     } else {
+      currentLineSize += currentLineIds.length > 0 ? mainGap + outerHypo : outerHypo;
       currentLineIds.push(id);
-      currentLineSize += outerHypo;
     }
   }
 
@@ -355,6 +367,7 @@ function computeIntrinsicContentSize(
 
       total += contentSize + pb + margin;
     }
+    total += resolveGaps(node, isNodeRow).main * Math.max(0, itemIds.length - 1);
     return total;
   } else {
     const crossDim: "width" | "height" = isNodeRow ? "height" : "width";
@@ -460,6 +473,7 @@ export function solveLayout(
         node.flexDirection === "row-reverse" ||
         node.flexDirection === undefined;
 
+      const { main: mainGap, cross: crossGap } = resolveGaps(node, isRow);
       const parentModel = boxModelMap.get(node.id)!;
 
       // Phase 3: Determine hypothetical main sizes
@@ -542,6 +556,7 @@ export function solveLayout(
                 : childModel.marginTop + childModel.marginBottom;
               totalHypoOuter += (hypoMainSizes.get(childId) ?? 0) + margin;
             }
+            totalHypoOuter += mainGap * Math.max(0, itemOrder.length - 1);
             if (isRow) {
               parentModel.contentWidth = totalHypoOuter;
             } else {
@@ -564,6 +579,7 @@ export function solveLayout(
         isRow,
         availableMainSize,
         wrap,
+        mainGap,
       );
       if (trace) {
         trace.flexLines.push(...lines);
@@ -727,7 +743,8 @@ export function solveLayout(
         }
 
         // Step 1: Grow vs shrink
-        let totalOuterHypo = 0;
+        const lineGapTotal = mainGap * Math.max(0, line.itemIds.length - 1);
+        let totalOuterHypo = lineGapTotal;
         for (const item of items) {
           totalOuterHypo +=
             item.hypoMainSize + item.paddingBorder + item.marginMain;
@@ -754,7 +771,7 @@ export function solveLayout(
           const unfrozen = items.filter((it) => !it.frozen);
           if (unfrozen.length === 0) break;
 
-          let remainingFreeSpace = availableMainSize;
+          let remainingFreeSpace = availableMainSize - lineGapTotal;
           for (const item of items) {
             if (item.frozen) {
               remainingFreeSpace -=
@@ -1014,7 +1031,9 @@ export function solveLayout(
         : typeof node.width !== "number";
 
       if (hasCrossAuto && !crossResolvedByParent) {
-        const totalLineCross = lineLayouts.reduce((s, l) => s + l.crossSize, 0);
+        const totalLineCross =
+          lineLayouts.reduce((s, l) => s + l.crossSize, 0) +
+          crossGap * Math.max(0, lineLayouts.length - 1);
         if (isRow) {
           parentModel.contentHeight = totalLineCross;
         } else {
@@ -1030,7 +1049,9 @@ export function solveLayout(
 
       // Apply align-content for multi-line containers (wrap/wrap-reverse)
       if (wrap) {
-        const totalLineCross = lineLayouts.reduce((s, l) => s + l.crossSize, 0);
+        const totalLineCross =
+          lineLayouts.reduce((s, l) => s + l.crossSize, 0) +
+          crossGap * Math.max(0, lineLayouts.length - 1);
         const remainingCross = containerCrossSize - totalLineCross;
         const alignContent = node.alignContent ?? "stretch";
         const numLines = lineLayouts.length;
@@ -1073,7 +1094,7 @@ export function solveLayout(
         let curCrossOffset = crossStart;
         for (const ll of lineLayouts) {
           ll.crossOffset = curCrossOffset;
-          curCrossOffset += ll.crossSize + interLineGap;
+          curCrossOffset += ll.crossSize + interLineGap + crossGap;
         }
       }
 
@@ -1323,6 +1344,7 @@ export function solveLayout(
         node.flexDirection === "column-reverse");
 
     if (isFlex) {
+      const { main: mainGap } = resolveGaps(node, isRow);
       const lineLayouts = containerLineLayouts.get(node.id) ?? [];
       const wrapReverse = node.flexWrap === "wrap-reverse";
       const containerCrossContentSize = isRow
@@ -1374,6 +1396,7 @@ export function solveLayout(
             if (origMargin.bottom === "auto") autoMarginCount++;
           }
         }
+        totalOuterMain += mainGap * Math.max(0, lineItems.length - 1);
 
         const remainingSpace = containerMainSize - totalOuterMain;
 
@@ -1596,7 +1619,7 @@ export function solveLayout(
                 contentBoxX + lineLayout.crossOffset + itemCrossOffset;
               childBorderBoxY = contentBoxY + currentMainPos;
             }
-            currentMainPos -= mainMarginEnd + interItemGap;
+            currentMainPos -= mainMarginEnd + interItemGap + mainGap;
           } else {
             if (isRow) {
               childBorderBoxX = contentBoxX + currentMainPos + mainMarginStart;
@@ -1608,7 +1631,7 @@ export function solveLayout(
               childBorderBoxY = contentBoxY + currentMainPos + mainMarginStart;
             }
             currentMainPos +=
-              mainMarginStart + mainBorderBox + mainMarginEnd + interItemGap;
+              mainMarginStart + mainBorderBox + mainMarginEnd + interItemGap + mainGap;
           }
 
           emitBoxes(child, childBorderBoxX, childBorderBoxY, myCB);
