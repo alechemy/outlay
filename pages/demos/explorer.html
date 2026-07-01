@@ -301,9 +301,38 @@
         padding: 24px;
         position: relative;
       }
+      .output-panes {
+        display: flex;
+        gap: 40px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      .pane-title {
+        font:
+          600 11px/1.2 "Helvetica Neue",
+          Helvetica,
+          Arial,
+          sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
       .output-container {
         position: relative;
         display: inline-block;
+      }
+      .match-status {
+        font:
+          11px/1 "SF Mono",
+          ui-monospace,
+          monospace;
+      }
+      .match-status.ok {
+        color: #2e7d32;
+      }
+      .match-status.bad {
+        color: var(--danger);
       }
 
       /* Rendered boxes */
@@ -318,6 +347,26 @@
         box-shadow: 0 0 0 2px var(--accent-light);
       }
       .layout-box.highlighted {
+        box-shadow: 0 0 0 2px var(--accent);
+      }
+      .layout-box.mismatch {
+        box-shadow: 0 0 0 2px var(--danger);
+      }
+
+      /* Browser CSS reference boxes: outline instead of border so the
+         decoration doesn't participate in the layout being compared. */
+      .ref-box {
+        position: relative;
+        outline: 1px solid rgba(0, 0, 0, 0.15);
+        outline-offset: -1px;
+        border-radius: 3px;
+        cursor: pointer;
+        transition: box-shadow 120ms;
+      }
+      .ref-box:hover {
+        box-shadow: 0 0 0 2px var(--accent-light);
+      }
+      .ref-box.highlighted {
         box-shadow: 0 0 0 2px var(--accent);
       }
       .layout-box-label {
@@ -403,9 +452,19 @@
       <div class="right-panel">
         <div class="output-header">
           <h2>Solved Layout</h2>
+          <span class="match-status" id="match-status"></span>
         </div>
         <div class="output-viewport" id="viewport">
-          <div class="output-container" id="output"></div>
+          <div class="output-panes">
+            <div>
+              <div class="pane-title">Solver</div>
+              <div class="output-container" id="output"></div>
+            </div>
+            <div>
+              <div class="pane-title">Browser CSS reference</div>
+              <div class="output-container" id="ref-output"></div>
+            </div>
+          </div>
         </div>
         <div class="detail-panel" id="detail">
           <span style="color: var(--muted)"

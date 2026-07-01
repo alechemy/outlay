@@ -19,10 +19,10 @@ interface TreeNode {
   props: {
     width: number | "auto";
     height: number | "auto";
-    flexDirection: "row" | "column";
+    flexDirection: "row" | "column" | "row-reverse" | "column-reverse";
     justifyContent: "flex-start" | "flex-end" | "center" | "space-between" | "space-around" | "space-evenly";
     alignItems: "flex-start" | "flex-end" | "center" | "stretch";
-    flexWrap: "nowrap" | "wrap";
+    flexWrap: "nowrap" | "wrap" | "wrap-reverse";
     gap: number;
     flexGrow: number;
     flexShrink: number;
@@ -172,8 +172,11 @@ function renderOutput(boxes: Map<string, ResolvedBox>) {
     const el = document.createElement("div");
     el.className = "layout-box" + (node.id === selectedId ? " highlighted" : "");
     el.dataset.id = node.id;
-    el.style.left = box.x - box.padding.left - box.border.left + "px";
-    el.style.top = box.y - box.padding.top - box.border.top + "px";
+    // box.x/y are border-box positions relative to the root's content
+    // origin; shift by the root's own border-box position so the root
+    // lands at (0,0) and children sit inside its padding.
+    el.style.left = box.x - rootBox.x + "px";
+    el.style.top = box.y - rootBox.y + "px";
     el.style.width = box.borderBoxWidth + "px";
     el.style.height = box.borderBoxHeight + "px";
     el.style.background = colorForDepth(depth);
@@ -208,6 +211,107 @@ function renderOutput(boxes: Map<string, ResolvedBox>) {
   renderBox(root, 0);
 }
 
+// --- Browser CSS reference pane ---
+function renderReference() {
+  const container = document.getElementById("ref-output")!;
+  container.innerHTML = "";
+
+  function buildRef(node: TreeNode, depth: number): HTMLElement {
+    const p = node.props;
+    const el = document.createElement("div");
+    el.className = "ref-box" + (node.id === selectedId ? " highlighted" : "");
+    el.dataset.refId = node.id;
+    el.style.display = "flex";
+    if (p.width !== "auto") el.style.width = p.width + "px";
+    if (p.height !== "auto") el.style.height = p.height + "px";
+    el.style.flexDirection = p.flexDirection;
+    el.style.justifyContent = p.justifyContent;
+    el.style.alignItems = p.alignItems;
+    el.style.flexWrap = p.flexWrap;
+    el.style.gap = p.gap + "px";
+    el.style.padding = p.padding + "px";
+    el.style.flexGrow = String(p.flexGrow);
+    el.style.flexShrink = String(p.flexShrink);
+    el.style.background = colorForDepth(depth);
+
+    const label = document.createElement("span");
+    label.className = "layout-box-label";
+    label.textContent = node.id;
+    el.appendChild(label);
+
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      selectedId = node.id;
+      update();
+    });
+
+    for (const child of node.children) {
+      el.appendChild(buildRef(child, depth + 1));
+    }
+    return el;
+  }
+
+  container.appendChild(buildRef(root, 0));
+}
+
+// --- Solver vs browser comparison ---
+interface CompareResult {
+  maxDelta: number;
+  mismatchedIds: string[];
+}
+
+function compareOutputs(boxes: Map<string, ResolvedBox>): CompareResult {
+  const refRootEl = document.querySelector<HTMLElement>("#ref-output > .ref-box");
+  const rootBox = boxes.get(root.id);
+  if (!refRootEl || !rootBox) return { maxDelta: 0, mismatchedIds: [] };
+
+  const rootRect = refRootEl.getBoundingClientRect();
+  const mismatched = new Set<string>();
+  let maxDelta = 0;
+
+  function walk(node: TreeNode) {
+    const box = boxes.get(node.id);
+    const el = document.querySelector<HTMLElement>(
+      `#ref-output [data-ref-id="${node.id}"]`,
+    );
+    if (box && el) {
+      const r = el.getBoundingClientRect();
+      const deltas = [
+        Math.abs(box.x - rootBox!.x - (r.left - rootRect.left)),
+        Math.abs(box.y - rootBox!.y - (r.top - rootRect.top)),
+        Math.abs(box.borderBoxWidth - r.width),
+        Math.abs(box.borderBoxHeight - r.height),
+      ];
+      for (const d of deltas) {
+        maxDelta = Math.max(maxDelta, d);
+        if (d > 0.5) mismatched.add(node.id);
+      }
+    }
+    node.children.forEach(walk);
+  }
+  walk(root);
+  return { maxDelta, mismatchedIds: [...mismatched] };
+}
+
+function renderMatchStatus(result: CompareResult) {
+  const badge = document.getElementById("match-status")!;
+  if (result.mismatchedIds.length === 0) {
+    badge.className = "match-status ok";
+    badge.textContent = `✓ matches browser (max Δ ${result.maxDelta.toFixed(2)}px)`;
+  } else {
+    badge.className = "match-status bad";
+    const ids = result.mismatchedIds;
+    badge.textContent =
+      `✗ differs from browser: ${ids.slice(0, 3).join(", ")}` +
+      `${ids.length > 3 ? "…" : ""} (max Δ ${result.maxDelta.toFixed(1)}px)`;
+    for (const id of ids) {
+      document
+        .querySelector(`#output .layout-box[data-id="${id}"]`)
+        ?.classList.add("mismatch");
+    }
+  }
+}
+
 // --- Tree panel ---
 function renderTree() {
   const container = document.getElementById("tree")!;
@@ -235,7 +339,9 @@ function renderTree() {
 
     const label = document.createElement("span");
     label.className = "tree-node-label";
-    const dir = node.props.flexDirection === "column" ? "col" : "row";
+    const dir = node.props.flexDirection
+      .replace("column", "col")
+      .replace("-reverse", "-rev");
     const sizeStr =
       (node.props.width === "auto" ? "auto" : node.props.width) +
       "\u00d7" +
@@ -294,7 +400,7 @@ function renderProps() {
     "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly",
   ]);
   addSelectRow(panel, "alignItems", node, ["stretch", "flex-start", "flex-end", "center"]);
-  addSelectRow(panel, "flexWrap", node, ["nowrap", "wrap"]);
+  addSelectRow(panel, "flexWrap", node, ["nowrap", "wrap", "wrap-reverse"]);
   addSliderRow(panel, "gap", node, 0, 40, 1);
   addSliderRow(panel, "padding", node, 0, 40, 1);
 
@@ -513,6 +619,8 @@ function renderDetail() {
 function solveAndRender() {
   const boxes = solve();
   renderOutput(boxes);
+  renderReference();
+  renderMatchStatus(compareOutputs(boxes));
   renderDetail();
 }
 
@@ -522,6 +630,8 @@ function update() {
   renderTree();
   renderProps();
   renderOutput(boxes);
+  renderReference();
+  renderMatchStatus(compareOutputs(boxes));
   renderDetail();
 }
 

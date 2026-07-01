@@ -33,7 +33,8 @@
     "probe": "tsx scripts/probe-chromium.ts",
     "bench": "tsx scripts/benchmark.ts",
     "package-smoke-test": "tsx scripts/package-smoke-test.ts",
-    "start": "vite"
+    "start": "vite",
+    "verify:explorer": "tsx scripts/verify-explorer.ts"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
