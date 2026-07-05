@@ -34,6 +34,7 @@
     "bench": "tsx scripts/benchmark.ts",
     "package-smoke-test": "tsx scripts/package-smoke-test.ts",
     "start": "vite",
+    "demo:server-layout": "tsx pages/demos/server-layout/generate.ts",
     "verify:explorer": "tsx scripts/verify-explorer.ts",
     "verify:text-demo": "tsx scripts/verify-text-demo.ts"
   },
