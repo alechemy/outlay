@@ -4,6 +4,19 @@ Build a set of browser demos for `constraint-layout-algo` that showcase practica
 
 Use `pretext/pages/demos/` as the structural template: each demo is an HTML file + TS file under `pages/demos/`, with a landing page (`pages/demos/index.html`) linking to all of them. Match pretext's visual quality — the demos are the public face of the library.
 
+## Status (2026-07-05)
+
+All six demos below are built and linked from `pages/demos/index.html`, alongside the pre-existing Text-driven layout demo. `npm start` serves them on port 5173.
+
+1. **Layout Explorer** — built earlier; `npm run verify:explorer` (50/50).
+2. **Animated Transitions** — `transitions.html`/`.ts`. Verified live (chrome-devtools MCP): solver frames tween via rAF, ~0.1 ms/solve badge, row↔column/wrap/justify/align toggles.
+3. **Drag-and-Drop Reorder** — `drag-reorder.html`/`.ts`. Uses a grid (reads better than flex rows). Verified: the grid re-solves on every pointer move and cards glide via `transform`; reorder commits correctly at end and mid-grid insertion points.
+4. **Virtual Scroll** — `virtual-scroll.html`/`.ts`. Uses the **real Pretext adapter** (`pretext-adapter.ts`) for variable row heights — the stub fallback below is obsolete. 10k rows solved once (~117 ms); ~12–16 DOM nodes at any scroll depth, zero positioning gaps. Column-flex text leaves must be `display: "block"` (a plain flex item is treated as a container and mis-measures — see CLAUDE.md).
+5. **Nested Dashboard** — `dashboard.html`/`.ts`. Card area uses `display: "grid"` (the showcase). ~110-node tree; a Solver-vs-CSS toggle renders the same tree both ways and the badge confirms they match at ≤0.01 px; responsive column reflow verified (3/2/1 columns). The grid column count is computed in JS and emitted as `repeat(N, "1fr")` because `repeat(auto-fill, …)` on a stretched (derived-width) grid mis-sizes rows in the current solver.
+6. **Server-Side Layout** — `pages/demos/server-layout/generate.ts`, run via `npm run demo:server-layout` (or `npx tsx …`). Reads `example-input.json`, calls `solveLayout` (no Pretext — Node has no canvas; the tree uses fixed sizes), writes `example-output.svg` (committed). Landing page links directly to the generated SVG.
+
+Shared box palette in `pages/demos/palette.ts`. The five non-scripted browser demos have no committed headless verify script; they were verified interactively via the chrome-devtools MCP.
+
 ## Guiding principles
 
 1. **Dogfood `solveLayout` in every demo.** The layout solver must be the thing doing the spatial math. Don't just render divs with CSS flexbox — that defeats the point. The solver computes positions, then the demo renders them (canvas, absolutely-positioned divs, SVG, etc.).
