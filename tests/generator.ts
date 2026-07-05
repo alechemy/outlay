@@ -48,6 +48,7 @@ let tier26Config = { category: 0 };
 let tier27Config = { category: 0 };
 let tier28Config = { category: 0 };
 let tier29Config = { category: 0 };
+let tier30Config = { category: 0 };
 
 const TEXT_FONT = "16px Arial";
 const TEXT_LINE_HEIGHT = 20;
@@ -1799,6 +1800,44 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         node.height = rng.nextRange(20, 60);
       }
     }
+  } else if (tier === 30) {
+    const cat = tier30Config.category;
+    if (depth === 2) {
+      if (cat === 1) {
+        node.display = "grid";
+        node.width = rng.nextRange(320, 700);
+        if (rng.next() < 0.5) node.height = rng.nextRange(240, 520);
+        node.gridTemplateColumns = Array.from(
+          { length: rng.nextRange(2, 3) },
+          (): TrackListEntry => (rng.next() < 0.5 ? "auto" : "1fr"),
+        );
+        node.gridTemplateRows = ["auto"] as TrackListEntry[];
+        if (rng.next() < 0.7) node.gap = genGap(rng);
+      } else {
+        node.display = "flex";
+        node.flexDirection = cat === 2 ? "row" : "column";
+        node.width = rng.nextRange(320, 700);
+        node.height = rng.nextRange(240, 560);
+        if (cat === 2 && rng.next() < 0.6) {
+          node.alignItems = rng.nextChoice([
+            "flex-start",
+            "center",
+            "stretch",
+          ] as const);
+        }
+        if (rng.next() < 0.5) node.gap = genGap(rng);
+      }
+    } else if (depth === 1) {
+      node.display = "flex";
+      node.flexWrap = rng.next() < 0.8 ? "wrap" : "wrap-reverse";
+      if (rng.next() < 0.3) node.width = rng.nextRange(140, 280);
+      if (rng.next() < 0.6) node.gap = genGap(rng);
+      if (cat === 2 && rng.next() < 0.4) node.flexGrow = rng.nextRange(0, 2);
+    } else {
+      isLeaf = true;
+      node.width = rng.nextRange(40, 130);
+      node.height = rng.nextRange(20, 60);
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1954,6 +1993,10 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                       ? depth === 2
                         ? rng.nextRange(2, 3)
                         : rng.nextRange(1, 3)
+                    : tier === 30
+                      ? depth === 2
+                        ? rng.nextRange(1, 3)
+                        : rng.nextRange(4, 10)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -2143,6 +2186,9 @@ async function generateFixtures(
     if (tier === 29) {
       tier29Config.category = i % 3;
     }
+    if (tier === 30) {
+      tier30Config.category = i % 3;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -2169,7 +2215,7 @@ async function generateFixtures(
                 tier === 26 ||
                 tier === 27
               ? 1
-            : tier === 23 || tier === 28 || tier === 29
+            : tier === 23 || tier === 28 || tier === 29 || tier === 30
               ? 2
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||

@@ -420,6 +420,13 @@ function subtreeHasWidthDependentContent(node: NormalizedLayoutNode): boolean {
   ) {
     return true;
   }
+  if (
+    node.display === "flex" &&
+    (node.flexWrap === "wrap" || node.flexWrap === "wrap-reverse") &&
+    node.children.length > 0
+  ) {
+    return true;
+  }
   for (const child of node.children) {
     if (subtreeHasWidthDependentContent(child)) return true;
   }
@@ -491,6 +498,36 @@ function computeIntrinsicContentSize(
 
   const isMainDimension = (dimension === "width") === isNodeRow;
   const itemIds = collectFlexItems(node);
+
+  if (
+    isMainDimension &&
+    isNodeRow &&
+    mode === "min-content" &&
+    (node.flexWrap === "wrap" || node.flexWrap === "wrap-reverse")
+  ) {
+    // A wrapping main axis can break between every item, so its min-content
+    // is the largest single item, not the single-line sum.
+    let maxOuter = 0;
+    for (const childId of itemIds) {
+      const child = nodeMap.get(childId)!;
+      const cm = boxModelMap.get(childId)!;
+      const pb =
+        cm.paddingLeft + cm.paddingRight + cm.borderLeft + cm.borderRight;
+      const margins = cm.marginLeft + cm.marginRight;
+      const contentW =
+        typeof child.width === "number"
+          ? cm.contentWidth
+          : computeIntrinsicContentSize(
+              child,
+              "width",
+              nodeMap,
+              boxModelMap,
+              "min-content",
+            );
+      maxOuter = Math.max(maxOuter, contentW + pb + margins);
+    }
+    return maxOuter;
+  }
 
   if (isMainDimension) {
     let total = 0;

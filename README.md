@@ -236,7 +236,7 @@ Grid exclusions (v1): no percentage tracks (caller resolves them), no named line
 
 ## Accuracy
 
-3460 fixtures across 28 tiers, all passing at 100%. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
+3700 fixtures across 30 tiers; 3699 passing (one documented open edge in deeply nested text, tracked in the repo's known gaps). Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
 
 ## Performance
 
