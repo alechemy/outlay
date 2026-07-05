@@ -34,7 +34,8 @@
     "bench": "tsx scripts/benchmark.ts",
     "package-smoke-test": "tsx scripts/package-smoke-test.ts",
     "start": "vite",
-    "verify:explorer": "tsx scripts/verify-explorer.ts"
+    "verify:explorer": "tsx scripts/verify-explorer.ts",
+    "verify:text-demo": "tsx scripts/verify-text-demo.ts"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",

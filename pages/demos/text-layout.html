@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Text-driven layout — Pretext adapter</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1a1a1a;
+        --muted: #666;
+        --line: #d0d0d0;
+        --card: #f4f6fb;
+        --card-border: #b9c2d6;
+        --ok: #1a7f37;
+        --bad: #b42318;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #16181d;
+          --fg: #e8e8e8;
+          --muted: #9aa0aa;
+          --line: #333842;
+          --card: #232733;
+          --card-border: #3b4252;
+          --ok: #3fb950;
+          --bad: #f85149;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 24px;
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      p.lede { color: var(--muted); margin: 0 0 20px; max-width: 62ch; }
+      code { background: var(--card); padding: 1px 5px; border-radius: 4px; }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+      .controls label { font-weight: 600; }
+      .controls input[type="range"] { width: 280px; }
+      #width-val { font-variant-numeric: tabular-nums; }
+      #match-status {
+        font-weight: 600;
+        padding: 6px 12px;
+        border-radius: 6px;
+        display: inline-block;
+      }
+      #match-status.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+      #match-status.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+      .panes {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+        align-items: start;
+      }
+      @media (max-width: 900px) { .panes { grid-template-columns: 1fr; } }
+      .pane h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 8px; }
+      .pane-frame { border: 1px dashed var(--line); border-radius: 8px; overflow: auto; }
+
+      /* Solver pane: absolutely-positioned boxes from ResolvedBox values. */
+      #solver-root { position: relative; }
+      .solver-box {
+        position: absolute;
+        background: var(--card);
+        border: 1px solid var(--card-border);
+        border-radius: 4px;
+        overflow: hidden;
+        color: var(--fg);
+        font: 16px/20px Arial;
+        overflow-wrap: anywhere;
+        white-space: normal;
+      }
+      .solver-box.mismatch { outline: 2px solid var(--bad); }
+
+      /* Reference pane: real CSS grid rendering the same tree. */
+      #ref-root { display: grid; }
+      .ref-card {
+        background: var(--card);
+        border: 1px solid var(--card-border);
+        border-radius: 4px;
+        color: var(--fg);
+        font: 16px/20px Arial;
+        overflow-wrap: anywhere;
+        white-space: normal;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Text-driven layout — Pretext adapter</h1>
+    <p class="lede">
+      A CSS Grid of text cards solved off-DOM. Each card's wrapped height comes
+      from <code>@chenglou/pretext</code> via a <code>measureContent</code>
+      adapter; auto rows are sized at the resolved column width. The left pane is
+      the solver's output; the right is the real browser. The badge compares them
+      at 0.5px tolerance.
+    </p>
+
+    <div class="controls">
+      <label for="width">Container width</label>
+      <input type="range" id="width" min="300" max="760" value="560" step="1" />
+      <span id="width-val"></span>
+      <span id="match-status"></span>
+    </div>
+
+    <div class="panes">
+      <div class="pane">
+        <h2>Solver (off-DOM)</h2>
+        <div class="pane-frame"><div id="solver-root"></div></div>
+      </div>
+      <div class="pane">
+        <h2>Browser reference</h2>
+        <div class="pane-frame"><div id="ref-root"></div></div>
+      </div>
+    </div>
+
+    <script type="module" src="./text-layout.ts"></script>
+  </body>
+</html>
