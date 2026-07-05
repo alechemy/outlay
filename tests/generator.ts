@@ -33,6 +33,16 @@ let idCounter = 1;
 let tier10Config = { category: 0, maxDepth: 1 };
 let tier13Config = { category: 0 };
 let tier15Config = { category: 0 };
+let tier16Config = { category: 0 };
+let tier17Config = { category: 0 };
+
+function maybeLiteralAuto(node: LayoutNode, rng: RNG, depth: number) {
+  if (node.width === undefined && rng.next() < 0.15) node.width = "auto";
+  if (node.height === undefined && rng.next() < 0.15) node.height = "auto";
+  if (depth === 0 && node.flexBasis === undefined && rng.next() < 0.15) {
+    node.flexBasis = "auto";
+  }
+}
 
 function genGap(rng: RNG): number | { row: number; column: number } {
   return rng.next() < 0.5
@@ -927,6 +937,93 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         node.alignSelf = rng.nextChoice(["baseline", "auto"] as const);
       }
     }
+  } else if (tier === 16) {
+    // Tier 16: keyword sizing (min-content / max-content) on container heights
+    // and on flex items (widths and heights).
+    // cat 0: row container, height keyword (cross-axis container sizing).
+    // cat 1: column container, height keyword (main-axis container sizing).
+    // cat 2: leaf items with keyword width/height, mixed grow/shrink.
+    // cat 3: nested flex items with keyword width/height (depth 2).
+    // cat 4: measureContent leaf items with keyword width.
+    // cat 5: container width keyword (row + column) with gap.
+    const cat = tier16Config.category;
+    const kw = () => rng.nextChoice(["min-content", "max-content"] as const);
+    if (cat === 3) {
+      if (depth === 2) {
+        node.display = "flex";
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        node.width = rng.nextRange(400, 800);
+        node.height = rng.nextRange(200, 450);
+        if (rng.next() < 0.5) node.gap = genGap(rng);
+      } else if (depth === 1) {
+        node.display = "flex";
+        node.flexDirection = rng.nextChoice(["row", "column"] as const);
+        node.flexWrap = "nowrap";
+        if (rng.next() < 0.65) node.width = kw() as any;
+        else node.width = rng.nextRange(80, 220);
+        if (rng.next() < 0.4) node.height = kw() as any;
+        node.flexGrow = rng.nextChoice([0, 0, 1] as const);
+        node.flexShrink = rng.nextChoice([0, 1] as const);
+      } else {
+        node.width = rng.nextRange(30, 100);
+        node.height = rng.nextRange(20, 90);
+        node.flexGrow = rng.nextChoice([0, 1] as const);
+        node.flexShrink = rng.nextChoice([0, 1] as const);
+      }
+    } else if (depth > 0) {
+      node.display = "flex";
+      if (cat === 0) node.flexDirection = "row";
+      else if (cat === 1) node.flexDirection = "column";
+      else node.flexDirection = rng.nextChoice(["row", "column"] as const);
+      node.flexWrap = "nowrap";
+      if (cat === 0) {
+        node.width = rng.nextRange(300, 700);
+        node.height = kw() as any;
+      } else if (cat === 1) {
+        node.width = rng.nextRange(150, 400);
+        node.height = kw() as any;
+      } else if (cat === 5) {
+        node.width = kw() as any;
+        node.height = rng.nextRange(160, 420);
+      } else {
+        node.width = rng.nextRange(300, 700);
+        node.height = rng.nextRange(160, 420);
+      }
+      if (rng.next() < 0.45) node.gap = genGap(rng);
+      if (rng.next() < 0.3) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+    } else {
+      // Leaf item.
+      if (cat === 4) {
+        isLeaf = true;
+        (node as any)._contentWidth = rng.nextRange(30, 150);
+        (node as any)._contentHeight = rng.nextRange(20, 80);
+        if (rng.next() < 0.6) node.width = kw() as any;
+        if (rng.next() < 0.4) node.height = kw() as any;
+        node.flexGrow = rng.nextChoice([0, 0, 1] as const);
+        node.flexShrink = rng.nextChoice([0, 1] as const);
+      } else if (cat === 2) {
+        if (rng.next() < 0.55) node.width = kw() as any;
+        else node.width = rng.nextRange(40, 120);
+        if (rng.next() < 0.5) node.height = kw() as any;
+        else node.height = rng.nextRange(30, 120);
+        node.flexGrow = rng.nextChoice([0, 0, 1] as const);
+        node.flexShrink = rng.nextChoice([0, 1] as const);
+      } else {
+        node.width = rng.nextRange(40, 150);
+        node.height = rng.nextRange(30, 120);
+        node.flexGrow = rng.nextChoice([0, 0, 1] as const);
+        node.flexShrink = rng.nextChoice([0, 1] as const);
+      }
+    }
+    maybeLiteralAuto(node, rng, depth);
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1052,6 +1149,8 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                       ? tier15Config.category === 2
                         ? rng.nextRange(4, 8)
                         : rng.nextRange(3, 6)
+                    : tier === 16
+                      ? rng.nextRange(2, 5)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -1158,6 +1257,12 @@ async function generateFixtures(
     if (tier === 15) {
       tier15Config.category = i % 6;
     }
+    if (tier === 16) {
+      tier16Config.category = i % 6;
+    }
+    if (tier === 17) {
+      tier17Config.category = i % 3;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -1172,6 +1277,12 @@ async function generateFixtures(
               ? tier15Config.category === 4
                 ? 2
                 : 1
+            : tier === 16
+              ? tier16Config.category === 3
+                ? 2
+                : 1
+            : tier === 17
+              ? 2
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||
                 tier === 9 ||

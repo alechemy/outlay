@@ -489,6 +489,48 @@ export function solveLayout(
   }
   resolveAllBoxModels(normalizedRoot);
 
+  // Resolve `min-content`/`max-content` sizes to concrete intrinsic values so
+  // downstream sizing treats them as definite (no stretch, correct flex base).
+  // Post-order: a container's intrinsic size depends on its children's sizes.
+  function resolveKeywordSizes(node: NormalizedLayoutNode) {
+    for (const child of node.children) resolveKeywordSizes(child);
+    const model = boxModelMap.get(node.id)!;
+    const borderBox = node.boxSizing === "border-box";
+    if (node.width === "min-content" || node.width === "max-content") {
+      const intrinsic = computeIntrinsicContentSize(
+        node,
+        "width",
+        nodeMap,
+        boxModelMap,
+        node.width,
+      );
+      model.contentWidth = intrinsic;
+      const pb =
+        model.paddingLeft +
+        model.paddingRight +
+        model.borderLeft +
+        model.borderRight;
+      node.width = borderBox ? intrinsic + pb : intrinsic;
+    }
+    if (node.height === "min-content" || node.height === "max-content") {
+      const intrinsic = computeIntrinsicContentSize(
+        node,
+        "height",
+        nodeMap,
+        boxModelMap,
+        node.height,
+      );
+      model.contentHeight = intrinsic;
+      const pb =
+        model.paddingTop +
+        model.paddingBottom +
+        model.borderTop +
+        model.borderBottom;
+      node.height = borderBox ? intrinsic + pb : intrinsic;
+    }
+  }
+  resolveKeywordSizes(normalizedRoot);
+
   // Vertical distance from a node's border-box top to its first baseline.
   // For an empty box Chromium synthesizes the baseline at the bottom border
   // edge; a flex container inherits its first in-flow item's baseline.
