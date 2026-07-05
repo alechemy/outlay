@@ -251,17 +251,82 @@ function collectIntoLines(
 }
 
 /**
- * Compute the intrinsic content-box size of a flex container in a given dimension.
- * mode: "min-content" uses flex-base-size; "max-content" uses max(flex-base, item max-content) for growable items.
+ * Resolves the inline size a column-container flex child will actually use —
+ * stretched to the container, or fit-content when not stretching — so
+ * block-axis intrinsic sizing can run against the real width (auto-repeat
+ * column counts depend on it). Undefined when the container's width is
+ * unknown.
  */
+function usedInlineSize(
+  container: NormalizedLayoutNode,
+  containerModel: ResolvedBoxModel,
+  containerWidthDefinite: boolean,
+  child: NormalizedLayoutNode,
+  childModel: ResolvedBoxModel,
+  nodeMap: Map<string, NormalizedLayoutNode>,
+  boxModelMap: Map<string, ResolvedBoxModel>,
+): number | undefined {
+  if (typeof child.width === "number") return childModel.contentWidth;
+  if (!containerWidthDefinite) return undefined;
+  const hPB =
+    childModel.paddingLeft +
+    childModel.paddingRight +
+    childModel.borderLeft +
+    childModel.borderRight;
+  const avail = Math.max(
+    0,
+    containerModel.contentWidth -
+      childModel.marginLeft -
+      childModel.marginRight -
+      hPB,
+  );
+  const align =
+    (child.alignSelf && child.alignSelf !== "auto"
+      ? child.alignSelf
+      : container.alignItems) ?? "stretch";
+  const stretches =
+    align === "stretch" &&
+    child.margin.left !== "auto" &&
+    child.margin.right !== "auto";
+  let value: number;
+  if (stretches) {
+    value = avail;
+  } else {
+    const maxC = computeIntrinsicContentSize(
+      child,
+      "width",
+      nodeMap,
+      boxModelMap,
+      "max-content",
+    );
+    const minC = computeIntrinsicContentSize(
+      child,
+      "width",
+      nodeMap,
+      boxModelMap,
+      "min-content",
+    );
+    value = Math.max(minC, Math.min(maxC, avail));
+  }
+  return clampCrossContent(child, value, hPB, false);
+}
+
 function gridIntrinsicSize(
   node: NormalizedLayoutNode,
   dimension: "width" | "height",
   nodeMap: Map<string, NormalizedLayoutNode>,
   boxModelMap: Map<string, ResolvedBoxModel>,
   mode: "min-content" | "max-content",
+  inlineSize?: number,
 ): number {
-  const colTracks = expandTrackList(node.gridTemplateColumns);
+  const colTracks =
+    dimension === "height" && inlineSize !== undefined
+      ? expandAutoRepeat(
+          node.gridTemplateColumns,
+          inlineSize,
+          resolveGaps(node, true).main,
+        ).tracks
+      : expandTrackList(node.gridTemplateColumns);
   const rowTracks = expandTrackList(node.gridTemplateRows);
   const gridItems = node.children.filter((child) => {
     const pos = child.position ?? "static";
@@ -333,15 +398,27 @@ function gridIntrinsicSize(
   return total;
 }
 
+/**
+ * Compute the intrinsic content-box size of a flex container in a given dimension.
+ * mode: "min-content" uses flex-base-size; "max-content" uses max(flex-base, item max-content) for growable items.
+ */
 function computeIntrinsicContentSize(
   node: NormalizedLayoutNode,
   dimension: "width" | "height",
   nodeMap: Map<string, NormalizedLayoutNode>,
   boxModelMap: Map<string, ResolvedBoxModel>,
   mode: "min-content" | "max-content" = "min-content",
+  inlineSize?: number,
 ): number {
   if (node.display === "grid" && node.children.length > 0) {
-    return gridIntrinsicSize(node, dimension, nodeMap, boxModelMap, mode);
+    return gridIntrinsicSize(
+      node,
+      dimension,
+      nodeMap,
+      boxModelMap,
+      mode,
+      inlineSize,
+    );
   }
   if (node.display !== "flex" || node.children.length === 0) {
     if (node.measureContent) {
@@ -731,6 +808,19 @@ export function solveLayout(
             mainDim,
             nodeMap,
             boxModelMap,
+            "min-content",
+            !isRow && child.display === "grid"
+              ? usedInlineSize(
+                  node,
+                  boxModelMap.get(node.id)!,
+                  typeof node.width === "number" ||
+                    (parentResolvedDims.get(node.id)?.has("width") ?? false),
+                  child,
+                  childModel,
+                  nodeMap,
+                  boxModelMap,
+                )
+              : undefined,
           );
           mainSize = intrinsicMain + pb;
         } else if (
@@ -912,6 +1002,18 @@ export function solveLayout(
               nodeMap,
               boxModelMap,
               mainDimProp === "width" ? "max-content" : "min-content",
+              !isRow && child.display === "grid"
+                ? usedInlineSize(
+                    node,
+                    boxModelMap.get(node.id)!,
+                    typeof node.width === "number" ||
+                      (parentResolvedDims.get(node.id)?.has("width") ?? false),
+                    child,
+                    childModel,
+                    nodeMap,
+                    boxModelMap,
+                  )
+                : undefined,
             );
           } else if (
             child.measureContent &&
@@ -989,6 +1091,19 @@ export function solveLayout(
                       nodeMap,
                       boxModelMap,
                       "min-content",
+                      !isRow && child.display === "grid"
+                        ? usedInlineSize(
+                            node,
+                            boxModelMap.get(node.id)!,
+                            typeof node.width === "number" ||
+                              (parentResolvedDims.get(node.id)?.has("width") ??
+                                false),
+                            child,
+                            childModel,
+                            nodeMap,
+                            boxModelMap,
+                          )
+                        : undefined,
                     );
               if (typeof child.height === "number") {
                 const specifiedContent =
@@ -1259,17 +1374,71 @@ export function solveLayout(
               typeof child[crossDim] !== "number" &&
               !childResolved?.has(crossDim)
             ) {
-              const intrinsicCross = computeIntrinsicContentSize(
-                child,
-                crossDim,
-                nodeMap,
-                boxModelMap,
-              );
               const childModel = boxModelMap.get(childId)!;
+              const markResolved = () => {
+                if (!parentResolvedDims.has(childId))
+                  parentResolvedDims.set(childId, new Set());
+                parentResolvedDims.get(childId)!.add(crossDim);
+              };
               if (crossDim === "height") {
-                childModel.contentHeight = intrinsicCross;
+                childModel.contentHeight = computeIntrinsicContentSize(
+                  child,
+                  "height",
+                  nodeMap,
+                  boxModelMap,
+                  "min-content",
+                  childResolved?.has("width")
+                    ? childModel.contentWidth
+                    : undefined,
+                );
+                markResolved();
               } else {
-                childModel.contentWidth = intrinsicCross;
+                // Non-stretched inline size is fit-content:
+                // clamp(min-content, available, max-content).
+                const maxC = computeIntrinsicContentSize(
+                  child,
+                  "width",
+                  nodeMap,
+                  boxModelMap,
+                  "max-content",
+                );
+                const minC = computeIntrinsicContentSize(
+                  child,
+                  "width",
+                  nodeMap,
+                  boxModelMap,
+                  "min-content",
+                );
+                const containerWidthDefinite =
+                  typeof node.width === "number" ||
+                  (parentResolvedDims.get(node.id)?.has("width") ?? false);
+                let fit = maxC;
+                if (containerWidthDefinite) {
+                  const nodeModel = boxModelMap.get(node.id)!;
+                  const hPB =
+                    childModel.paddingLeft +
+                    childModel.paddingRight +
+                    childModel.borderLeft +
+                    childModel.borderRight;
+                  const avail = Math.max(
+                    0,
+                    nodeModel.contentWidth -
+                      childModel.marginLeft -
+                      childModel.marginRight -
+                      hPB,
+                  );
+                  fit = Math.max(minC, Math.min(maxC, avail));
+                }
+                childModel.contentWidth = clampCrossContent(
+                  child,
+                  fit,
+                  childModel.paddingLeft +
+                    childModel.paddingRight +
+                    childModel.borderLeft +
+                    childModel.borderRight,
+                  false,
+                );
+                markResolved();
               }
             }
           }

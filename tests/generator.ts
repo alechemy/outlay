@@ -46,6 +46,7 @@ let tier23Config = { category: 0 };
 let tier24Config = { category: 0 };
 let tier26Config = { category: 0 };
 let tier27Config = { category: 0 };
+let tier28Config = { category: 0 };
 
 const TEXT_FONT = "16px Arial";
 const TEXT_LINE_HEIGHT = 20;
@@ -1697,6 +1698,43 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         node.height = rng.nextRange(24, 90);
       }
     }
+  } else if (tier === 28) {
+    const cat = tier28Config.category;
+    if (depth === 2) {
+      node.display = "flex";
+      node.flexDirection = cat === 1 ? "row" : "column";
+      node.width = rng.nextRange(400, 900);
+      node.height = rng.nextRange(300, 600);
+      if (cat === 2) {
+        node.alignItems = rng.nextChoice([
+          "stretch",
+          "flex-start",
+          "center",
+        ] as const);
+      }
+      if (rng.next() < 0.5) node.gap = genGap(rng);
+    } else if (depth === 1) {
+      node.display = "grid";
+      const min = rng.nextRange(60, 140);
+      node.gridTemplateColumns = [
+        {
+          repeat: rng.next() < 0.5 ? "auto-fill" : "auto-fit",
+          tracks: [rng.next() < 0.6 ? { min, max: "1fr" as const } : min],
+        },
+      ];
+      node.gridAutoRows = rng.nextRange(30, 80);
+      if (rng.next() < 0.7) node.gap = genGap(rng);
+      if (cat === 1) {
+        node.flexGrow = rng.nextRange(0, 2);
+        if (rng.next() < 0.5) node.height = rng.nextRange(120, 300);
+      }
+      if (cat === 2 && rng.next() < 0.5) {
+        node.alignSelf = rng.nextChoice(["stretch", "flex-start"] as const);
+      }
+    } else {
+      if (rng.next() < 0.4) node.width = rng.nextRange(30, 110);
+      if (rng.next() < 0.4) node.height = rng.nextRange(20, 60);
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1844,6 +1882,10 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                       ? rng.nextRange(2, 6)
                     : tier === 27
                       ? rng.nextRange(2, 6)
+                    : tier === 28
+                      ? depth === 2
+                        ? rng.nextRange(1, 3)
+                        : rng.nextRange(3, 8)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -2027,6 +2069,9 @@ async function generateFixtures(
     if (tier === 27) {
       tier27Config.category = i % 3;
     }
+    if (tier === 28) {
+      tier28Config.category = i % 3;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -2053,7 +2098,7 @@ async function generateFixtures(
                 tier === 26 ||
                 tier === 27
               ? 1
-            : tier === 23
+            : tier === 23 || tier === 28
               ? 2
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||

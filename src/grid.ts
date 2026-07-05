@@ -565,11 +565,26 @@ export function resolveTrackSizes(
     // the fr-unit equalization below only applies to max-content sizing.
     if (!equalizeFrWhenIndefinite) return sizes;
     // Indefinite space: no maximize/stretch; fr unit is the max of
-    // base/factor over the flexible tracks (factors below 1 treated as 1).
+    // base/factor over the flexible tracks (factors below 1 treated as 1),
+    // and of each item's max contribution over the flex factors it spans —
+    // this is what sizes minmax(px, fr) tracks to their content.
     let frUnit = 0;
     for (const i of flexIndices) {
       const f = factors[i]!;
       if (f > 0) frUnit = Math.max(frUnit, sizes[i] / Math.max(f, 1));
+    }
+    for (const item of items) {
+      let sumF = 0;
+      let nonFlexSum = gap * (item.end - item.start - 1);
+      for (let i = item.start; i < item.end; i++) {
+        if (factors[i] !== null) sumF += factors[i]!;
+        else nonFlexSum += sizes[i];
+      }
+      if (sumF <= 0) continue;
+      const contribution = item.max - nonFlexSum;
+      if (contribution > 0) {
+        frUnit = Math.max(frUnit, contribution / Math.max(sumF, 1));
+      }
     }
     for (const i of flexIndices) {
       sizes[i] = Math.max(sizes[i], frUnit * factors[i]!);
