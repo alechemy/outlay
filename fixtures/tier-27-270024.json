@@ -1,0 +1,208 @@
+{
+  "tier": 27,
+  "seed": 270024,
+  "description": "Tier 27 randomly generated fixture (seed 270024)",
+  "input": {
+    "id": "root-node",
+    "padding": {
+      "top": 4,
+      "right": 7,
+      "bottom": 9,
+      "left": 12
+    },
+    "margin": {
+      "top": 16,
+      "right": 1,
+      "bottom": 9,
+      "left": 9
+    },
+    "border": {
+      "top": 4,
+      "right": 1,
+      "bottom": 8,
+      "left": 9
+    },
+    "boxSizing": "content-box",
+    "display": "grid",
+    "children": [
+      {
+        "id": "node-2",
+        "padding": {
+          "top": 16,
+          "right": 19,
+          "bottom": 13,
+          "left": 8
+        },
+        "margin": {
+          "top": 10,
+          "right": 17,
+          "bottom": 10,
+          "left": 20
+        },
+        "border": {
+          "top": 0,
+          "right": 4,
+          "bottom": 7,
+          "left": 7
+        },
+        "boxSizing": "border-box",
+        "display": "block",
+        "children": []
+      },
+      {
+        "id": "node-3",
+        "padding": {
+          "top": 19,
+          "right": 9,
+          "bottom": 12,
+          "left": 1
+        },
+        "margin": {
+          "top": 0,
+          "right": 19,
+          "bottom": 12,
+          "left": 2
+        },
+        "border": {
+          "top": 6,
+          "right": 9,
+          "bottom": 1,
+          "left": 10
+        },
+        "boxSizing": "content-box",
+        "display": "block",
+        "children": []
+      }
+    ],
+    "width": 325,
+    "gridTemplateColumns": [
+      158,
+      "auto",
+      {
+        "min": 52,
+        "max": 190
+      }
+    ],
+    "gridTemplateRows": [
+      "auto"
+    ],
+    "gap": 33,
+    "alignItems": "stretch"
+  },
+  "expected": {
+    "root-node": {
+      "id": "root-node",
+      "x": -21,
+      "y": -8,
+      "width": 325,
+      "height": 190,
+      "padding": {
+        "top": 4,
+        "right": 7,
+        "bottom": 9,
+        "left": 12
+      },
+      "border": {
+        "top": 4,
+        "right": 1,
+        "bottom": 8,
+        "left": 9
+      },
+      "margin": {
+        "top": 16,
+        "right": 1,
+        "bottom": 9,
+        "left": 9
+      },
+      "borderBoxWidth": 354,
+      "borderBoxHeight": 215,
+      "outerWidth": 364,
+      "outerHeight": 240
+    },
+    "node-2": {
+      "id": "node-2",
+      "x": 20,
+      "y": 10,
+      "width": 83,
+      "height": 134,
+      "padding": {
+        "top": 16,
+        "right": 19,
+        "bottom": 13,
+        "left": 8
+      },
+      "border": {
+        "top": 0,
+        "right": 4,
+        "bottom": 7,
+        "left": 7
+      },
+      "margin": {
+        "top": 10,
+        "right": 17,
+        "bottom": 10,
+        "left": 20
+      },
+      "borderBoxWidth": 121,
+      "borderBoxHeight": 170,
+      "outerWidth": 158,
+      "outerHeight": 190
+    },
+    "node-3": {
+      "id": "node-3",
+      "x": 193,
+      "y": 0,
+      "width": 72.9375,
+      "height": 140,
+      "padding": {
+        "top": 19,
+        "right": 9,
+        "bottom": 12,
+        "left": 1
+      },
+      "border": {
+        "top": 6,
+        "right": 9,
+        "bottom": 1,
+        "left": 10
+      },
+      "margin": {
+        "top": 0,
+        "right": 19,
+        "bottom": 12,
+        "left": 2
+      },
+      "borderBoxWidth": 101.9375,
+      "borderBoxHeight": 178,
+      "outerWidth": 122.9375,
+      "outerHeight": 190
+    }
+  },
+  "chromiumVersion": "Chrome/146.0.7680.153",
+  "tolerance": 0.5,
+  "textMeasurements": {
+    "node-2": {
+      "wordWidths": [
+        24.8984375,
+        69.3671875,
+        133.421875,
+        18.671875
+      ],
+      "spaceWidth": 4.4453125,
+      "lineHeight": 20
+    },
+    "node-3": {
+      "wordWidths": [
+        55.1484375,
+        69.3671875,
+        55.1484375,
+        72.9296875,
+        22.2421875,
+        65.8203125,
+        51.578125
+      ],
+      "spaceWidth": 4.4453125,
+      "lineHeight": 20
+    }
+  }
+}
