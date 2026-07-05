@@ -24,6 +24,7 @@
     }
   },
   "files": [
+    "CHANGELOG.md",
     "dist",
     "src",
     "LICENSE"
@@ -37,6 +38,7 @@
     "test:example": "npm run build && npm --prefix examples/layout-assertions install && npm --prefix examples/layout-assertions test",
     "generate": "tsx tests/generator.ts",
     "probe": "tsx scripts/probe-chromium.ts",
+    "prepack": "npm run build",
     "bench": "tsx scripts/benchmark.ts",
     "package-smoke-test": "tsx scripts/package-smoke-test.ts",
     "start": "vite",
