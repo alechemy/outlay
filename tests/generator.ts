@@ -42,6 +42,7 @@ let tier19Config = { category: 0 };
 let tier20Config = { category: 0 };
 let tier21Config = { category: 0 };
 let tier22Config = { category: 0 };
+let tier23Config = { category: 0 };
 
 function maybeLiteralAuto(node: LayoutNode, rng: RNG, depth: number) {
   if (node.width === undefined && rng.next() < 0.15) node.width = "auto";
@@ -1425,6 +1426,65 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         else node.margin = { ...genBoxSides(rng, 15), top: "auto" };
       }
     }
+  } else if (tier === 23) {
+    const cat = tier23Config.category;
+    const smallTrack = (): TrackListEntry => {
+      const r = rng.next();
+      if (r < 0.45) return rng.nextRange(40, 140);
+      if (r < 0.8) return "auto";
+      return "1fr";
+    };
+    if (depth === 2) {
+      if (cat === 1) {
+        node.display = "flex";
+        node.flexDirection = rng.next() < 0.6 ? "row" : "column";
+        node.width = rng.nextRange(300, 800);
+        node.height = rng.nextRange(200, 500);
+        if (rng.next() < 0.5) node.gap = genGap(rng);
+        if (rng.next() < 0.3) node.flexWrap = "wrap";
+      } else {
+        node.display = "grid";
+        node.width = rng.nextRange(300, 800);
+        if (rng.next() < 0.7) node.height = rng.nextRange(200, 500);
+        node.gridTemplateColumns = Array.from(
+          { length: rng.nextRange(2, 3) },
+          smallTrack,
+        );
+        node.gridTemplateRows = Array.from(
+          { length: rng.nextRange(2, 3) },
+          smallTrack,
+        );
+        if (rng.next() < 0.7) node.gap = genGap(rng);
+      }
+    } else if (depth === 1) {
+      if (cat === 0) {
+        node.display = "flex";
+        node.flexDirection = rng.next() < 0.6 ? "row" : "column";
+        if (rng.next() < 0.4) node.width = rng.nextRange(80, 250);
+        if (rng.next() < 0.4) node.height = rng.nextRange(60, 180);
+        if (rng.next() < 0.5) node.gap = genGap(rng);
+      } else {
+        node.display = "grid";
+        node.gridTemplateColumns = Array.from(
+          { length: rng.nextRange(2, 3) },
+          smallTrack,
+        );
+        node.gridTemplateRows = Array.from(
+          { length: 2 },
+          smallTrack,
+        );
+        if (rng.next() < 0.5) node.width = rng.nextRange(100, 300);
+        if (rng.next() < 0.5) node.height = rng.nextRange(80, 220);
+        if (rng.next() < 0.5) node.gap = genGap(rng);
+        if (cat === 1) {
+          if (rng.next() < 0.4) node.flexGrow = rng.nextRange(0, 2);
+          if (rng.next() < 0.5) node.flexShrink = 0;
+        }
+      }
+    } else {
+      if (rng.next() < 0.6) node.width = rng.nextRange(20, 120);
+      if (rng.next() < 0.6) node.height = rng.nextRange(15, 90);
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1562,6 +1622,8 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                       ? tier22Config.category === 3
                         ? rng.nextRange(4, 8)
                         : rng.nextRange(3, 6)
+                    : tier === 23
+                      ? rng.nextRange(2, 4)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -1580,6 +1642,9 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
       } else if (rng.next() < 0.5) {
         assignGridPlacements(node, rng, false);
       }
+    }
+    if (tier === 23 && node.display === "grid" && rng.next() < 0.5) {
+      assignGridPlacements(node, rng, false);
     }
   }
 
@@ -1705,6 +1770,9 @@ async function generateFixtures(
     if (tier === 22) {
       tier22Config.category = i % 5;
     }
+    if (tier === 23) {
+      tier23Config.category = i % 3;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -1727,6 +1795,8 @@ async function generateFixtures(
               ? 3
             : tier >= 18 && tier <= 22
               ? 1
+            : tier === 23
+              ? 2
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||
                 tier === 9 ||

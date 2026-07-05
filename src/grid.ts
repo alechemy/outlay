@@ -265,6 +265,7 @@ export function resolveTrackSizes(
   available: number | undefined,
   items: TrackItemContribution[],
   stretchTracks = true,
+  equalizeFrWhenIndefinite = true,
 ): number[] {
   // Span-1 contributions feed intrinsic bases and growth limits directly.
   const minContributions = new Array<number>(count).fill(0);
@@ -473,6 +474,9 @@ export function resolveTrackSizes(
   }
 
   if (available === undefined) {
+    // Under a min-content constraint fr tracks stay at their base sizes;
+    // the fr-unit equalization below only applies to max-content sizing.
+    if (!equalizeFrWhenIndefinite) return sizes;
     // Indefinite space: no maximize/stretch; fr unit is the max of
     // base/factor over the flexible tracks (factors below 1 treated as 1).
     let frUnit = 0;
