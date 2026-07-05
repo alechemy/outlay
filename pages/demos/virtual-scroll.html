@@ -116,6 +116,51 @@
         position: relative;
         width: 100%;
       }
+      .compare {
+        margin: 14px 0 0;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: 8px 14px;
+      }
+      .compare-out {
+        min-height: 17px;
+      }
+      .compare-note {
+        grid-column: 1 / -1;
+      }
+      .comparebtn {
+        font:
+          500 12px/1 "SF Mono",
+          ui-monospace,
+          monospace;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--ink);
+        padding: 9px 14px;
+        cursor: pointer;
+      }
+      .comparebtn:hover {
+        border-color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+      }
+      .compare-out {
+        font:
+          12px/1.4 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--muted);
+      }
+      .compare-out strong { color: var(--accent); }
+      .compare-note {
+        flex-basis: 100%;
+        margin: 2px 0 0;
+        max-width: 76ch;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
       .v-row {
         position: absolute;
         left: 0;
@@ -152,16 +197,28 @@
       <p class="eyebrow">outlay</p>
       <h1>Virtual Scroll</h1>
       <p class="intro">
-        Ten thousand rows of wrapped text, every row a different height. The
-        solver runs <code>solveLayout</code> once over the whole list — heights
-        come from <code>@chenglou/pretext</code> through a
-        <code>measureContent</code> adapter — so every position is known before
-        the first paint. Only the rows in view are ever in the DOM, and because
-        the geometry is exact there are no height estimates and no scroll-jump
-        corrections.
+        Ten thousand rows of wrapped text, every row a different height.
+        <strong>outlay</strong> lays out the entire 10,001-node list in one
+        <code>solveLayout</code> call — every row's <code>y</code> and height
+        below comes from the solver, not from the DOM. Text heights feed in
+        through the <code>measureContent</code> contract, supplied here by
+        <code>@chenglou/pretext</code>. Because every position is known before
+        the first paint, only the rows in view are ever mounted, and there are
+        no height estimates and no scroll-jump corrections.
       </p>
 
       <div class="stats" id="stats"></div>
+
+      <div class="compare">
+        <button class="comparebtn" id="btn-compare">Compare: mount all 10,000 rows in the DOM</button>
+        <span class="compare-out" id="compare-out"></span>
+        <p class="compare-note">
+          Re-answers "height and position of every row" both ways: outlay from
+          the tree, the DOM by mounting a throwaway off-screen copy of all
+          10,000 rows and forcing a reflow. Nothing on this page changes.
+        </p>
+      </div>
+
       <div class="scroller" id="scroller">
         <div class="canvas" id="canvas"></div>
       </div>

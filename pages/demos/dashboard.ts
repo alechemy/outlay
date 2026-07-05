@@ -317,12 +317,58 @@ function compare(boxes: Map<string, ResolvedBox>): { max: number; worst: string 
   return { max, worst };
 }
 
+const codeEl = document.getElementById("mode-code")!;
+let lastBoxes: Map<string, ResolvedBox> | null = null;
+let lastSolveMs = 0;
+let lastMax = 0;
+let nodeCount = 0;
+
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+}
+
+function findNode(id: string): DNode | null {
+  let found: DNode | null = null;
+  eachNode(tree, (d) => {
+    if (d.id === id) found = d;
+  });
+  return found;
+}
+
+function updateCodePanel() {
+  if (!lastBoxes) return;
+  const card = lastBoxes.get("card-0");
+  const shell = lastBoxes.get("shell");
+  const grid = findNode("cardgrid");
+  if (!card || !shell || !grid) return;
+  const x = (card.x - shell.x).toFixed(1);
+  const y = (card.y - shell.y).toFixed(1);
+  const w = card.borderBoxWidth.toFixed(1);
+  const h = card.borderBoxHeight.toFixed(1);
+  if (mode === "solver") {
+    codeEl.innerHTML =
+      `<span class="cm">// this pane: the solver's numbers, drawn as absolutely-positioned divs</span>\n` +
+      `<span class="kw">const</span> { boxes } = solveLayout(tree);  <span class="cm">// ${nodeCount} nodes in ${lastSolveMs.toFixed(3)} ms — no DOM involved</span>\n\n` +
+      `boxes.get("card-0")  <span class="cm">// → { x: ${x}, y: ${y}, width: ${w}, height: ${h} }</span>\n` +
+      esc(`<div style="position:absolute; left:${x}px; top:${y}px; width:${w}px; height:${h}px">`) +
+      `  <span class="cm">// ← the VISITORS card above</span>`;
+  } else {
+    codeEl.innerHTML =
+      `<span class="cm">// this pane: the same tree serialized to native CSS — the browser lays it out</span>\n` +
+      esc(`<div style="${cssFor(grid.layout)}">`) +
+      `  <span class="cm">// the card grid</span>\n\n` +
+      `<span class="cm">// the badge cross-checks every node against the solver via getBoundingClientRect:</span>\n` +
+      `<span class="cm">// max Δ ${lastMax.toFixed(2)}px across ${nodeCount} nodes</span>`;
+  }
+}
+
 function applyMode() {
   solverRoot.style.visibility = mode === "solver" ? "visible" : "hidden";
   cssRoot.style.visibility = mode === "css" ? "visible" : "hidden";
   for (const btn of document.querySelectorAll<HTMLElement>("#mode button")) {
     btn.classList.toggle("active", btn.dataset.mode === mode);
   }
+  updateCodePanel();
 }
 
 function update() {
@@ -334,13 +380,16 @@ function update() {
 
   renderCss();
   renderSolver(boxes);
-  applyMode();
 
-  let count = 0;
-  eachNode(tree, () => count++);
-  timingEl.innerHTML = `${count} nodes · solved in <strong>${ms.toFixed(3)} ms</strong>`;
+  nodeCount = 0;
+  eachNode(tree, () => nodeCount++);
+  timingEl.innerHTML = `${nodeCount} nodes · solved in <strong>${ms.toFixed(3)} ms</strong>`;
 
   const { max, worst } = compare(boxes);
+  lastBoxes = boxes;
+  lastSolveMs = ms;
+  lastMax = max;
+  applyMode();
   if (max <= 0.5) {
     matchEl.className = "match ok";
     matchEl.textContent = `✓ solver matches CSS (max Δ ${max.toFixed(2)}px)`;

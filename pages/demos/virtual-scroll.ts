@@ -46,7 +46,27 @@ function makePoolText(rand: () => number): string {
 
 const rand = mulberry32(0x5eed);
 const POOL = Array.from({ length: POOL_SIZE }, () => makePoolText(rand));
-const poolMeasurers = POOL.map((t) => makeTextMeasure(t, FONT, LINE_HEIGHT));
+
+// Rows share 64 paragraphs, so measuring each (text, width) pair once collapses
+// ~30k measureContent calls per solve into 64 — the prepare-once/layout-cheap
+// split a production adapter would use.
+function memoizeMeasure(
+  measure: (w: number) => { width: number; height: number },
+): (w: number) => { width: number; height: number } {
+  const cache = new Map<number, { width: number; height: number }>();
+  return (w) => {
+    let r = cache.get(w);
+    if (!r) {
+      r = measure(w);
+      cache.set(w, r);
+    }
+    return r;
+  };
+}
+
+const poolMeasurers = POOL.map((t) =>
+  memoizeMeasure(makeTextMeasure(t, FONT, LINE_HEIGHT)),
+);
 
 function poolIndex(i: number): number {
   return (i * 31 + 7) % POOL_SIZE;
@@ -162,8 +182,44 @@ function updateStats() {
     `<div class="stat">total rows<b>${TOTAL.toLocaleString()}</b></div>` +
     `<div class="stat">DOM nodes<b>${mounted.size}</b></div>` +
     `<div class="stat">content height<b>${Math.round(totalHeight).toLocaleString()} px</b></div>` +
-    `<div class="stat">solved in<b>${solveMs.toFixed(1)} ms</b></div>`;
+    `<div class="stat">outlay solve, all rows<b>${solveMs.toFixed(1)} ms</b></div>`;
 }
+
+document.getElementById("btn-compare")!.addEventListener("click", () => {
+  const out = document.getElementById("compare-out")!;
+
+  const t0 = performance.now();
+  const { boxes } = solveLayout(buildTree(listWidth));
+  const solverNow = performance.now() - t0;
+  void boxes;
+
+  const t1 = performance.now();
+  const holder = document.createElement("div");
+  holder.style.cssText = `position:absolute; left:-99999px; top:0; width:${listWidth}px; visibility:hidden;`;
+  for (let i = 0; i < TOTAL; i++) {
+    const row = document.createElement("div");
+    row.style.cssText = "padding:14px 22px; border-bottom:1px solid transparent;";
+    const body = document.createElement("div");
+    body.style.cssText = "font:15px/22px Arial,sans-serif; overflow-wrap:anywhere; white-space:normal;";
+    body.textContent = POOL[poolIndex(i)];
+    row.appendChild(body);
+    holder.appendChild(row);
+  }
+  document.body.appendChild(holder);
+  let sink = 0;
+  for (const el of holder.children) {
+    sink += (el as HTMLElement).getBoundingClientRect().height;
+  }
+  const domMs = performance.now() - t1;
+  holder.remove();
+  void sink;
+
+  const ratio = domMs / solverNow;
+  out.innerHTML =
+    `outlay: ${(TOTAL + 1).toLocaleString()} boxes in <strong>${solverNow.toFixed(1)} ms</strong> · ` +
+    `DOM: ${TOTAL.toLocaleString()} rows mounted + measured in <strong>${domMs.toFixed(1)} ms</strong>` +
+    (ratio >= 1.05 ? ` · <strong>${ratio.toFixed(1)}× faster</strong>` : "");
+});
 
 let ticking = false;
 scroller.addEventListener("scroll", () => {

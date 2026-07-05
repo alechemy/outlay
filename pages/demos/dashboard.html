@@ -154,9 +154,9 @@
       }
       #solver-root .d-box {
         position: absolute;
-        border-color: transparent;
         overflow: hidden;
       }
+      .d-box,
       .d-css-box {
         border-color: transparent;
       }
@@ -189,7 +189,7 @@
         justify-content: center;
       }
       .k-sidebar {
-        background: color-mix(in srgb, var(--panel) 82%, #efe4d5 18%);
+        background: color-mix(in srgb, var(--panel) 82%, #dfe9ee 18%);
         border-color: var(--rule);
       }
       .k-navitem {
@@ -257,6 +257,24 @@
           monospace;
       }
 
+      .code-panel {
+        margin-top: 14px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        background: var(--panel);
+        padding: 13px 16px;
+        overflow-x: auto;
+      }
+      .code-panel pre {
+        margin: 0;
+        font:
+          12px/1.6 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--ink);
+      }
+      .code-panel .cm { color: var(--muted); }
+      .code-panel .kw { color: var(--accent); }
       /* Text leaves are flex-centered so single-line text sits vertically
          centered in both render modes. */
       .d-text {
@@ -297,6 +315,11 @@
         <div class="render-root" id="css-root"></div>
         <div class="render-root" id="solver-root"></div>
       </div>
+
+      <div class="code-panel">
+        <pre id="mode-code"></pre>
+      </div>
+
     </main>
 
     <script type="module" src="./dashboard.ts"></script>
