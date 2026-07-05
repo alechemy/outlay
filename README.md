@@ -175,6 +175,26 @@ Two things to keep in mind:
 
 The `pages/demos/text-layout.html` demo wires this adapter into a live card grid and checks the solver against the browser at 0.5px tolerance.
 
+## Testing layouts
+
+Because `solveLayout` is synchronous and browser-free, you can assert a component's
+layout — overlaps, overflow, breakpoint column counts — inside a plain unit test, and
+sweep hundreds of viewport widths in a few milliseconds:
+
+```ts
+const failures = sweep(range(320, 1280, 20), buildCardGrid, (result) => {
+  assertNoOverlaps(result, cardIds);
+  if (overflowsX(result, "page")) throw new Error("content crosses the page edge");
+});
+expect(failures).toEqual([]); // each failure names the width that broke
+```
+
+jsdom computes no layout, WASM engines need async init, and Playwright is a sledgehammer
+for "does this overflow at 375px". A pure solver is the right tool. The full example —
+assertion helpers, a Node-safe text measurer, a responsive card grid, and a regression
+guard — is in [`examples/layout-assertions/`](examples/layout-assertions/). Run it with
+`npm run test:example`.
+
 ## What's supported
 
 - Flexbox layout (row, column, reverse, wrap)

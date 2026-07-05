@@ -432,6 +432,18 @@ Out of scope for v-grid-1 (documented in CLAUDE.md Known gaps and the README): p
 
 Deferred (documented in CLAUDE.md Known gaps): width-dependent text one level deep — a text leaf inside a *nested* flex/grid container over-wraps because `computeIntrinsicContentSize` measures it at unconstrained intrinsic width, not the item's resolved width. Needs a degenerate-layout pass rather than a contribution reorder. Constant-size content nests correctly.
 
+### Flagship consumer (Layout Assertions) — Shipped (2026-07-05)
+
+The chosen flagship consumer (per the 2026-07-05 strategy review): layout assertions inside component/unit tests, the venue where a synchronous, zero-WASM, browser-free layout engine is uniquely necessary (jsdom computes no layout, WASM engines need async init in the runner, Playwright is a sledgehammer). OG-image generation was rejected as the flagship (Takumi owns that lane).
+
+- [x] `examples/layout-assertions/` — self-contained example package (own `package.json`, vitest, imports the built `dist/`).
+- [x] Assertion helpers over `LayoutResult` (`boxOf`, `overlaps`/`assertNoOverlaps`, `within`/`assertContained`, `overflowsX`/`overflowsY`) and the signature `sweep(widths, buildTree, invariant)` that solves at each width and reports the offending width.
+- [x] Node-safe text measurement (`text-metrics.ts` greedy line breaker over committed per-word advances in `word-metrics.json`), mirroring the fixture runner's contract; Pretext supplies the same contract in a browser/worker runner.
+- [x] `card-grid.test.ts` (header + `repeat(auto-fill, minmax(220px, 1fr))` grid + footer CTA, swept 320–1280) and `regression.test.ts` (a fixed sidebar width whose over-widening the sweep catches).
+- [x] Root `npm run test:example` (builds `dist/`, installs the example, runs vitest); root README "Testing layouts" section.
+
+Solver issue surfaced while building it (see CLAUDE.md Known gaps): a **nested** flex-wrap container's content-based (auto) cross size counts only the first flex line, so the container under-sizes when its items wrap. Item positions are correct; only the container's own auto cross size is wrong. Root-level wrap containers size correctly. The example avoids the path (its CTA row is budgeted to stay single-line in range and single-row is asserted from item positions, which are correct).
+
 ---
 
 ## Open Questions for Investigation
