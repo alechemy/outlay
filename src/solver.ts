@@ -12,6 +12,14 @@ import {
     ResolvedBoxModel,
     SolverOptions,
 } from "./types.js";
+import {
+    GridLayoutInfo,
+    expandTrackList,
+    gridAreaSize,
+    resolveFixedTrackSizes,
+    resolvePlacements,
+    trackOffsets,
+} from "./grid.js";
 
 const ZERO_SIDES: BoxSides = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -465,6 +473,7 @@ export function solveLayout(
     baselineDescent?: number;
   }
   const containerLineLayouts = new Map<string, LineLayout[]>();
+  const containerGridLayouts = new Map<string, GridLayoutInfo>();
   const parentResolvedDims = new Map<string, Set<"width" | "height">>();
 
   interface ContainingBlockInfo {
@@ -1325,6 +1334,85 @@ export function solveLayout(
           }
         }
       }
+    } else if (node.display === "grid") {
+      const model = boxModelMap.get(node.id)!;
+      const { main: colGap, cross: rowGap } = resolveGaps(node, true);
+      const colTracks = expandTrackList(node.gridTemplateColumns);
+      const rowTracks = expandTrackList(node.gridTemplateRows);
+      const gridItems = node.children.filter((child) => {
+        const pos = child.position ?? "static";
+        return (
+          child.display !== "none" && pos !== "absolute" && pos !== "fixed"
+        );
+      });
+      const { placements, colCount, rowCount } = resolvePlacements(
+        gridItems,
+        colTracks.length,
+        rowTracks.length,
+      );
+      const colSizes = resolveFixedTrackSizes(colTracks, colCount);
+      const rowSizes = resolveFixedTrackSizes(rowTracks, rowCount);
+
+      const resolvedDims = parentResolvedDims.get(node.id);
+      if (typeof node.height !== "number" && !resolvedDims?.has("height")) {
+        const trackHeight =
+          rowSizes.reduce((a, b) => a + b, 0) +
+          rowGap * Math.max(0, rowSizes.length - 1);
+        model.contentHeight = clampCrossContent(
+          node,
+          trackHeight,
+          model.paddingTop +
+            model.paddingBottom +
+            model.borderTop +
+            model.borderBottom,
+          true,
+        );
+      }
+
+      containerGridLayouts.set(node.id, {
+        colSizes,
+        rowSizes,
+        colOffsets: trackOffsets(colSizes, colGap),
+        rowOffsets: trackOffsets(rowSizes, rowGap),
+        placements,
+      });
+
+      for (const child of gridItems) {
+        const p = placements.get(child.id)!;
+        const cm = boxModelMap.get(child.id)!;
+        const areaWidth = gridAreaSize(colSizes, p.colStart, p.colEnd, colGap);
+        const areaHeight = gridAreaSize(
+          rowSizes,
+          p.rowStart,
+          p.rowEnd,
+          rowGap,
+        );
+        const hPB =
+          cm.paddingLeft + cm.paddingRight + cm.borderLeft + cm.borderRight;
+        const vPB =
+          cm.paddingTop + cm.paddingBottom + cm.borderTop + cm.borderBottom;
+        let dims = parentResolvedDims.get(child.id);
+        if (!dims) {
+          dims = new Set();
+          parentResolvedDims.set(child.id, dims);
+        }
+        if (typeof child.width !== "number") {
+          const stretched = Math.max(
+            0,
+            areaWidth - cm.marginLeft - cm.marginRight - hPB,
+          );
+          cm.contentWidth = clampCrossContent(child, stretched, hPB, false);
+          dims.add("width");
+        }
+        if (typeof child.height !== "number") {
+          const stretched = Math.max(
+            0,
+            areaHeight - cm.marginTop - cm.marginBottom - vPB,
+          );
+          cm.contentHeight = clampCrossContent(child, stretched, vPB, true);
+          dims.add("height");
+        }
+      }
     }
 
     for (const child of node.children) {
@@ -1815,6 +1903,24 @@ export function solveLayout(
           }
 
           emitBoxes(child, childBorderBoxX, childBorderBoxY, myCB);
+        }
+      }
+    } else if (node.display === "grid") {
+      const grid = containerGridLayouts.get(node.id);
+      if (grid) {
+        for (const child of node.children) {
+          if (child.display === "none") continue;
+          const pos = child.position ?? "static";
+          if (pos === "absolute" || pos === "fixed") continue;
+          const p = grid.placements.get(child.id);
+          if (!p) continue;
+          const cm = boxModelMap.get(child.id)!;
+          emitBoxes(
+            child,
+            contentBoxX + grid.colOffsets[p.colStart] + cm.marginLeft,
+            contentBoxY + grid.rowOffsets[p.rowStart] + cm.marginTop,
+            myCB,
+          );
         }
       }
     } else {

@@ -6,6 +6,14 @@ Read `CLAUDE.md` first (ground truth hierarchy, iteration loop) and PROJECT.md's
 
 Run `npm run test` and confirm all pre-grid tiers green (1625/1625 across Tiers 1–14 as of 2026-07-01; later sessions may have added baseline/coverage tiers — all must be green). Run `npm run bench`; the performance targets in CLAUDE.md apply to grid trees too.
 
+## Vocabulary and scope decisions (Phase 0 strategy review, 2026-07-05)
+
+- Grid takes tiers 18–23 (tiers 15–17 went to baseline/keyword-sizing/block-in-flex).
+- `repeat()` is represented in the types as `{ repeat: n | "auto-fill" | "auto-fit", tracks: TrackSize[] }` and resolved in the solver — auto-fill/auto-fit counts depend on the resolved container size, so the caller cannot pre-expand them. Fixed-count repeat is accepted too.
+- `justifyItems`/`justifySelf` are in the types (`start`/`end`/`center`/`stretch`, plus `auto` on self). `alignItems`/`alignSelf` keep the flex vocabulary; in grid context `flex-start`/`flex-end` behave as `start`/`end` (matches Chromium's handling).
+- Out of scope for v-grid-1 (state in README when claiming grid support): percentage tracks/sizes (caller-resolvable, consistent with the rest of the vocabulary), named lines and `grid-template-areas` (statically resolvable to line numbers by the caller), subgrid and masonry (Taffy lacks both too), `alignContent: space-evenly` (absent from the flex union as well — one vocabulary).
+- Chromium behaviors pinned by probe (2026-07-05, Chrome 146): fr minimum is content-based (`1fr` ≡ `minmax(auto, 1fr)`) with clamp-and-redistribute like the flex §9.7 loop; under default alignment, auto tracks absorb leftover free space *equally* on both axes, including implicit tracks in a definite-size container; `auto-fill` count = floor((available + gap) / (track + gap)); out-of-template placement creates implicit tracks sized by `gridAutoColumns`/`gridAutoRows`; `dense` backfills the earliest hole.
+
 ## Current state
 
 - `src/types.ts` already declares the grid vocabulary: `TrackSize`, `TrackDefinition`, `gridTemplateColumns/Rows`, `gridAutoRows/Columns`, `gridAutoFlow` (incl. `dense`), `gridColumn/Row` placement, `display: "grid"`. The solver and generator have zero grid support; `display: "grid"` nodes currently fall through to the block path.

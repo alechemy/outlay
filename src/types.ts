@@ -4,13 +4,20 @@ export type TrackSize =
   | `${number}fr`
   | "min-content"
   | "max-content"
-  | { min: number | "auto"; max: number | "auto" | `${number}fr` };
+  | {
+      min: number | "auto" | "min-content" | "max-content";
+      max: number | "auto" | `${number}fr` | "min-content" | "max-content";
+    };
 
-export type TrackDefinition =
-  | number
-  | "auto"
-  | `${number}fr`
-  | { min: number | "auto"; max: number | "auto" | `${number}fr` };
+export type TrackDefinition = TrackSize;
+
+/** repeat() must resolve in the solver: auto-fill/auto-fit counts depend on the laid-out container size. */
+export type TrackRepeat = {
+  repeat: number | "auto-fill" | "auto-fit";
+  tracks: TrackSize[];
+};
+
+export type TrackListEntry = TrackSize | TrackRepeat;
 
 export interface BoxSides {
   top: number;
@@ -91,17 +98,19 @@ export interface LayoutNode {
     | "baseline";
   order?: number;
 
-  gridTemplateColumns?: TrackDefinition[];
-  gridTemplateRows?: TrackDefinition[];
+  gridTemplateColumns?: TrackListEntry[];
+  gridTemplateRows?: TrackListEntry[];
   gridAutoRows?: TrackSize;
   gridAutoColumns?: TrackSize;
   gridAutoFlow?: "row" | "column" | "row dense" | "column dense";
+  justifyItems?: "start" | "end" | "center" | "stretch";
 
   gridColumn?: {
     start: number | "auto";
     end: number | "auto" | `span ${number}`;
   };
   gridRow?: { start: number | "auto"; end: number | "auto" | `span ${number}` };
+  justifySelf?: "auto" | "start" | "end" | "center" | "stretch";
 
   position?: "static" | "relative" | "absolute" | "fixed";
   top?: number;
@@ -165,17 +174,19 @@ export interface NormalizedLayoutNode {
     | "baseline";
   order?: number;
 
-  gridTemplateColumns?: TrackDefinition[];
-  gridTemplateRows?: TrackDefinition[];
+  gridTemplateColumns?: TrackListEntry[];
+  gridTemplateRows?: TrackListEntry[];
   gridAutoRows?: TrackSize;
   gridAutoColumns?: TrackSize;
   gridAutoFlow?: "row" | "column" | "row dense" | "column dense";
+  justifyItems?: "start" | "end" | "center" | "stretch";
 
   gridColumn?: {
     start: number | "auto";
     end: number | "auto" | `span ${number}`;
   };
   gridRow?: { start: number | "auto"; end: number | "auto" | `span ${number}` };
+  justifySelf?: "auto" | "start" | "end" | "center" | "stretch";
 
   position?: "static" | "relative" | "absolute" | "fixed";
   top?: number;

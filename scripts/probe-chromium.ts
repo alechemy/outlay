@@ -26,6 +26,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import puppeteer from "puppeteer";
+import { gridStyleDeclarations } from "../tests/grid-css";
 
 // Minimal LayoutNode → HTML converter (mirrors generator.ts toHTML)
 function normalizeSides(input: any): { top: number | "auto"; right: number | "auto"; bottom: number | "auto"; left: number | "auto" } {
@@ -74,6 +75,7 @@ function toHTML(node: any): string {
     node.right !== undefined && `right: ${node.right}px`,
     node.bottom !== undefined && `bottom: ${node.bottom}px`,
     node.left !== undefined && `left: ${node.left}px`,
+    ...gridStyleDeclarations(node),
   ].filter(Boolean);
 
   const children = (node.children ?? []).map(toHTML).join("\n");

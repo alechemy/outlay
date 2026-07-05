@@ -1,0 +1,212 @@
+{
+  "tier": 18,
+  "seed": 180059,
+  "description": "Tier 18 randomly generated fixture (seed 180059)",
+  "input": {
+    "id": "root-node",
+    "padding": {
+      "top": 5,
+      "right": 16,
+      "bottom": 14,
+      "left": 18
+    },
+    "margin": {
+      "top": 10,
+      "right": 9,
+      "bottom": 17,
+      "left": 14
+    },
+    "border": {
+      "top": 5,
+      "right": 5,
+      "bottom": 7,
+      "left": 1
+    },
+    "boxSizing": "content-box",
+    "display": "grid",
+    "children": [
+      {
+        "id": "node-2",
+        "padding": {
+          "top": 0,
+          "right": 19,
+          "bottom": 5,
+          "left": 9
+        },
+        "margin": {
+          "top": 6,
+          "right": 20,
+          "bottom": 8,
+          "left": 15
+        },
+        "border": {
+          "top": 9,
+          "right": 4,
+          "bottom": 6,
+          "left": 4
+        },
+        "boxSizing": "border-box",
+        "display": "block",
+        "children": [],
+        "width": 113,
+        "height": 58,
+        "gridColumn": {
+          "start": 3,
+          "end": 4
+        },
+        "gridRow": {
+          "start": 1,
+          "end": 2
+        }
+      },
+      {
+        "id": "node-3",
+        "padding": {
+          "top": 18,
+          "right": 10,
+          "bottom": 5,
+          "left": 15
+        },
+        "margin": {
+          "top": 13,
+          "right": 4,
+          "bottom": 17,
+          "left": 18
+        },
+        "border": {
+          "top": 7,
+          "right": 7,
+          "bottom": 6,
+          "left": 1
+        },
+        "boxSizing": "border-box",
+        "display": "block",
+        "children": [],
+        "width": 31,
+        "height": 36,
+        "gridColumn": {
+          "start": 1,
+          "end": "auto"
+        },
+        "gridRow": {
+          "start": 1,
+          "end": 2
+        }
+      }
+    ],
+    "width": 203,
+    "height": 460,
+    "gridTemplateColumns": [
+      {
+        "repeat": 2,
+        "tracks": [
+          158
+        ]
+      },
+      75
+    ],
+    "gridTemplateRows": [
+      {
+        "repeat": 2,
+        "tracks": [
+          92
+        ]
+      }
+    ],
+    "gap": {
+      "row": 32,
+      "column": 8
+    }
+  },
+  "expected": {
+    "root-node": {
+      "id": "root-node",
+      "x": -19,
+      "y": -10,
+      "width": 203,
+      "height": 460,
+      "padding": {
+        "top": 5,
+        "right": 16,
+        "bottom": 14,
+        "left": 18
+      },
+      "border": {
+        "top": 5,
+        "right": 5,
+        "bottom": 7,
+        "left": 1
+      },
+      "margin": {
+        "top": 10,
+        "right": 9,
+        "bottom": 17,
+        "left": 14
+      },
+      "borderBoxWidth": 243,
+      "borderBoxHeight": 491,
+      "outerWidth": 266,
+      "outerHeight": 518
+    },
+    "node-2": {
+      "id": "node-2",
+      "x": 347,
+      "y": 6,
+      "width": 77,
+      "height": 38,
+      "padding": {
+        "top": 0,
+        "right": 19,
+        "bottom": 5,
+        "left": 9
+      },
+      "border": {
+        "top": 9,
+        "right": 4,
+        "bottom": 6,
+        "left": 4
+      },
+      "margin": {
+        "top": 6,
+        "right": 20,
+        "bottom": 8,
+        "left": 15
+      },
+      "borderBoxWidth": 113,
+      "borderBoxHeight": 58,
+      "outerWidth": 148,
+      "outerHeight": 72
+    },
+    "node-3": {
+      "id": "node-3",
+      "x": 18,
+      "y": 13,
+      "width": 0,
+      "height": 0,
+      "padding": {
+        "top": 18,
+        "right": 10,
+        "bottom": 5,
+        "left": 15
+      },
+      "border": {
+        "top": 7,
+        "right": 7,
+        "bottom": 6,
+        "left": 1
+      },
+      "margin": {
+        "top": 13,
+        "right": 4,
+        "bottom": 17,
+        "left": 18
+      },
+      "borderBoxWidth": 33,
+      "borderBoxHeight": 36,
+      "outerWidth": 55,
+      "outerHeight": 66
+    }
+  },
+  "chromiumVersion": "Chrome/146.0.7680.153",
+  "tolerance": 0.5
+}
