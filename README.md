@@ -1,6 +1,6 @@
 # constraint-layout-algo
 
-Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes without a browser. The layout equivalent of what [Pretext](https://github.com/chenglou/pretext) does for text measurement: extracting a DOM-dependent computation into standalone arithmetic.
+Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes without a browser, verified against Chromium's own layout engine at 0.5px tolerance across 3,700 generated fixtures. The layout equivalent of what [Pretext](https://github.com/chenglou/pretext) does for text measurement: extracting a DOM-dependent computation into standalone arithmetic.
 
 ## Installation
 
