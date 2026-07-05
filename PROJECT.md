@@ -322,6 +322,8 @@ Tests are organized into numbered tiers of increasing difficulty. All unlocked t
 
 **Tier 27: Text in grid** — text-driven track sizing: text items in `auto`/`fr`/`minmax()`/px columns feeding min-content (widest word) and max-content (single line) contributions; auto-height rows sized by wrapped text at the resolved column width; fit-content (`justifyItems: start/center`) vs stretched columns. ~150 fixtures.
 
+**Tier 28: Derived-width auto-repeat grids** — auto-fill/auto-fit grids nested in flex with no explicit width: stretched (column parents), flex-distributed (row parents), and fit-content (non-stretch alignment) inline sizes; intrinsic heights computed at the used inline size. ~120 fixtures.
+
 ---
 
 ## Prior Art
