@@ -106,6 +106,7 @@ export function resolvePlacements(
   explicitCols: number,
   explicitRows: number,
   flow: "row" | "column",
+  dense = false,
 ): {
   placements: Map<string, GridPlacement>;
   colCount: number;
@@ -178,9 +179,17 @@ export function resolvePlacements(
   let cursorBlock = 0;
   for (const entry of entries) {
     if (placed.has(entry.id)) continue;
+    if (dense) {
+      cursorInline = 0;
+      cursorBlock = 0;
+    }
     if (entry.inline.start !== null) {
-      if (entry.inline.start < cursorInline) cursorBlock++;
-      cursorInline = entry.inline.start;
+      if (dense) {
+        cursorInline = entry.inline.start;
+      } else {
+        if (entry.inline.start < cursorInline) cursorBlock++;
+        cursorInline = entry.inline.start;
+      }
       while (
         !occupancy.fits(
           cursorInline,
@@ -255,6 +264,7 @@ export function resolveTrackSizes(
   gap: number,
   available: number | undefined,
   items: TrackItemContribution[],
+  stretchTracks = true,
 ): number[] {
   // Span-1 contributions feed intrinsic bases and growth limits directly.
   const minContributions = new Array<number>(count).fill(0);
@@ -538,7 +548,7 @@ export function resolveTrackSizes(
   // auto-max tracks, ignoring growth limits.
   let remaining = innerSpace;
   for (let i = 0; i < count; i++) remaining -= sizes[i];
-  if (remaining > 0) {
+  if (remaining > 0 && stretchTracks) {
     const stretchIndices: number[] = [];
     for (let i = 0; i < count; i++) {
       if (stretchable[i]) stretchIndices.push(i);
@@ -552,23 +562,94 @@ export function resolveTrackSizes(
   return sizes;
 }
 
-export function trackOffsets(sizes: number[], gap: number): number[] {
+export type ContentDistribution =
+  | "flex-start"
+  | "flex-end"
+  | "center"
+  | "space-between"
+  | "space-around"
+  | "space-evenly"
+  | "stretch";
+
+/**
+ * Track offsets under justify-content/align-content. Free space distributes
+ * between tracks (or as a leading offset); stretch/normal was already absorbed
+ * into auto tracks during sizing.
+ */
+export function trackOffsets(
+  sizes: number[],
+  gap: number,
+  available?: number,
+  distribution?: ContentDistribution,
+): number[] {
+  let lead = 0;
+  let extra = 0;
+  const n = sizes.length;
+  if (available !== undefined && distribution !== undefined && n > 0) {
+    let free = available - gap * Math.max(0, n - 1);
+    for (const s of sizes) free -= s;
+    switch (distribution) {
+      case "flex-end":
+        lead = free;
+        break;
+      case "center":
+        lead = free / 2;
+        break;
+      case "space-between":
+        if (free > 0 && n > 1) extra = free / (n - 1);
+        break;
+      case "space-around":
+        if (free > 0) {
+          extra = free / n;
+          lead = extra / 2;
+        }
+        break;
+      case "space-evenly":
+        if (free > 0) {
+          extra = free / (n + 1);
+          lead = extra;
+        }
+        break;
+      default:
+        break;
+    }
+  }
   const offsets: number[] = [];
-  let pos = 0;
+  let pos = lead;
   for (const size of sizes) {
     offsets.push(pos);
-    pos += size + gap;
+    pos += size + gap + extra;
   }
   return offsets;
 }
 
-export function gridAreaSize(
-  sizes: number[],
-  start: number,
-  end: number,
-  gap: number,
-): number {
-  let total = 0;
-  for (let i = start; i < end; i++) total += sizes[i] ?? 0;
-  return total + gap * Math.max(0, end - start - 1);
+export type GridItemAlignment = "start" | "end" | "center" | "stretch";
+
+export function gridItemJustify(
+  child: NormalizedLayoutNode,
+  container: NormalizedLayoutNode,
+): GridItemAlignment {
+  return child.justifySelf && child.justifySelf !== "auto"
+    ? child.justifySelf
+    : (container.justifyItems ?? "stretch");
 }
+
+export function gridItemAlign(
+  child: NormalizedLayoutNode,
+  container: NormalizedLayoutNode,
+): GridItemAlignment {
+  const raw =
+    child.alignSelf && child.alignSelf !== "auto"
+      ? child.alignSelf
+      : (container.alignItems ?? "stretch");
+  switch (raw) {
+    case "flex-start":
+    case "baseline":
+      return "start";
+    case "flex-end":
+      return "end";
+    default:
+      return raw;
+  }
+}
+

@@ -41,6 +41,7 @@ let tier18Config = { category: 0 };
 let tier19Config = { category: 0 };
 let tier20Config = { category: 0 };
 let tier21Config = { category: 0 };
+let tier22Config = { category: 0 };
 
 function maybeLiteralAuto(node: LayoutNode, rng: RNG, depth: number) {
   if (node.width === undefined && rng.next() < 0.15) node.width = "auto";
@@ -1314,6 +1315,116 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
       if (rng.next() < 0.6) node.width = rng.nextRange(30, 180);
       if (rng.next() < 0.6) node.height = rng.nextRange(20, 110);
     }
+  } else if (tier === 22) {
+    const cat = tier22Config.category;
+    if (depth > 0) {
+      node.display = "grid";
+      node.width = rng.nextRange(250, 700);
+      node.height = rng.nextRange(200, 500);
+      const colCount = rng.nextRange(2, 4);
+      const rowCount = rng.nextRange(2, 3);
+      const track = (px: () => number): TrackListEntry => {
+        const r = rng.next();
+        if (r < 0.5) return px();
+        if (r < 0.8) return "auto";
+        return "1fr";
+      };
+      const fixedTrack = (px: () => number): TrackListEntry =>
+        rng.next() < 0.7 ? px() : "auto";
+      if (cat === 1 || cat === 2) {
+        node.gridTemplateColumns = Array.from({ length: colCount }, () =>
+          fixedTrack(() => rng.nextRange(40, 130)),
+        );
+        node.gridTemplateRows = Array.from({ length: rowCount }, () =>
+          fixedTrack(() => rng.nextRange(30, 100)),
+        );
+      } else {
+        node.gridTemplateColumns = Array.from({ length: colCount }, () =>
+          track(() => rng.nextRange(40, 160)),
+        );
+        node.gridTemplateRows = Array.from({ length: rowCount }, () =>
+          track(() => rng.nextRange(30, 120)),
+        );
+      }
+      if (rng.next() < 0.7) node.gap = genGap(rng);
+      if (cat === 0 || cat === 4) {
+        if (rng.next() < 0.7) {
+          node.justifyItems = rng.nextChoice([
+            "start",
+            "end",
+            "center",
+            "stretch",
+          ] as const);
+        }
+        if (rng.next() < 0.7) {
+          node.alignItems = rng.nextChoice([
+            "flex-start",
+            "flex-end",
+            "center",
+            "stretch",
+          ] as const);
+        }
+      }
+      if (cat === 1) {
+        node.justifyContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "space-between",
+          "space-around",
+          "space-evenly",
+        ] as const);
+      }
+      if (cat === 2) {
+        node.alignContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+          "space-between",
+          "space-around",
+        ] as const);
+        if (rng.next() < 0.5) {
+          node.justifyContent = rng.nextChoice([
+            "flex-start",
+            "center",
+            "space-between",
+          ] as const);
+        }
+      }
+      if (cat === 3) {
+        node.gridAutoFlow = rng.next() < 0.7 ? "row dense" : "column dense";
+        if (rng.next() < 0.5) {
+          node.gridAutoRows = rng.nextRange(30, 90);
+        }
+      }
+    } else {
+      if (rng.next() < 0.6) node.width = rng.nextRange(30, 160);
+      if (rng.next() < 0.6) node.height = rng.nextRange(20, 110);
+      if (cat === 0 && rng.next() < 0.4) {
+        node.justifySelf = rng.nextChoice([
+          "start",
+          "end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+      if (cat === 0 && rng.next() < 0.4) {
+        node.alignSelf = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+      if (cat === 4 && rng.next() < 0.5) {
+        const side = rng.next();
+        if (side < 0.4) node.margin = { ...genBoxSides(rng, 15), left: "auto" };
+        else if (side < 0.7)
+          node.margin = { ...genBoxSides(rng, 15), left: "auto", right: "auto" };
+        else node.margin = { ...genBoxSides(rng, 15), top: "auto" };
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1447,6 +1558,10 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                       ? [1, 3, 4].includes(tier21Config.category)
                         ? rng.nextRange(4, 8)
                         : rng.nextRange(2, 4)
+                    : tier === 22
+                      ? tier22Config.category === 3
+                        ? rng.nextRange(4, 8)
+                        : rng.nextRange(3, 6)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -1458,6 +1573,13 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
     }
     if (tier === 21 && node.display === "grid") {
       assignTier21Placements(node, rng, tier21Config.category);
+    }
+    if (tier === 22 && node.display === "grid") {
+      if (tier22Config.category === 3) {
+        assignTier21Placements(node, rng, 4);
+      } else if (rng.next() < 0.5) {
+        assignGridPlacements(node, rng, false);
+      }
     }
   }
 
@@ -1481,10 +1603,7 @@ function toHTML(node: LayoutNode): string {
     `display: ${node.display}`,
   ].filter(Boolean);
 
-  if (node.display === "flex") {
-    if (node.flexDirection)
-      styles.push(`flex-direction: ${node.flexDirection}`);
-    if (node.flexWrap) styles.push(`flex-wrap: ${node.flexWrap}`);
+  if (node.display === "flex" || node.display === "grid") {
     if (node.alignItems) styles.push(`align-items: ${node.alignItems}`);
     if (node.justifyContent)
       styles.push(`justify-content: ${node.justifyContent}`);
@@ -1496,13 +1615,10 @@ function toHTML(node: LayoutNode): string {
           : `gap: ${node.gap.row}px ${node.gap.column}px`,
       );
   }
-
-  if (node.display === "grid" && node.gap !== undefined) {
-    styles.push(
-      typeof node.gap === "number"
-        ? `gap: ${node.gap}px`
-        : `gap: ${node.gap.row}px ${node.gap.column}px`,
-    );
+  if (node.display === "flex") {
+    if (node.flexDirection)
+      styles.push(`flex-direction: ${node.flexDirection}`);
+    if (node.flexWrap) styles.push(`flex-wrap: ${node.flexWrap}`);
   }
   styles.push(...gridStyleDeclarations(node));
 
@@ -1586,6 +1702,9 @@ async function generateFixtures(
     if (tier === 21) {
       tier21Config.category = i % 5;
     }
+    if (tier === 22) {
+      tier22Config.category = i % 5;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -1606,7 +1725,7 @@ async function generateFixtures(
                 : 1
             : tier === 17
               ? 3
-            : tier >= 18 && tier <= 21
+            : tier >= 18 && tier <= 22
               ? 1
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||

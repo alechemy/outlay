@@ -16,7 +16,8 @@ import {
     GridLayoutInfo,
     TrackItemContribution,
     expandTrackList,
-    gridAreaSize,
+    gridItemAlign,
+    gridItemJustify,
     resolvePlacements,
     resolveTrackSizes,
     trackOffsets,
@@ -1347,11 +1348,13 @@ export function solveLayout(
         );
       });
       const flow = node.gridAutoFlow?.startsWith("column") ? "column" : "row";
+      const dense = node.gridAutoFlow?.includes("dense") ?? false;
       const { placements, colCount, rowCount } = resolvePlacements(
         gridItems,
         colTracks.length,
         rowTracks.length,
         flow,
+        dense,
       );
 
       const colTrackList = colTracks.slice();
@@ -1447,6 +1450,7 @@ export function solveLayout(
         colGap,
         widthDefinite ? model.contentWidth : undefined,
         colItems,
+        node.justifyContent === undefined,
       );
       const rowSizes = resolveTrackSizes(
         rowTrackList,
@@ -1454,6 +1458,7 @@ export function solveLayout(
         rowGap,
         heightDefinite ? model.contentHeight : undefined,
         rowItems,
+        node.alignContent === undefined || node.alignContent === "stretch",
       );
 
       if (!heightDefinite) {
@@ -1471,24 +1476,37 @@ export function solveLayout(
         );
       }
 
+      const colOffsets = trackOffsets(
+        colSizes,
+        colGap,
+        widthDefinite ? model.contentWidth : undefined,
+        node.justifyContent,
+      );
+      const rowOffsets = trackOffsets(
+        rowSizes,
+        rowGap,
+        heightDefinite ? model.contentHeight : undefined,
+        node.alignContent,
+      );
       containerGridLayouts.set(node.id, {
         colSizes,
         rowSizes,
-        colOffsets: trackOffsets(colSizes, colGap),
-        rowOffsets: trackOffsets(rowSizes, rowGap),
+        colOffsets,
+        rowOffsets,
         placements,
       });
 
       for (const child of gridItems) {
         const p = placements.get(child.id)!;
         const cm = boxModelMap.get(child.id)!;
-        const areaWidth = gridAreaSize(colSizes, p.colStart, p.colEnd, colGap);
-        const areaHeight = gridAreaSize(
-          rowSizes,
-          p.rowStart,
-          p.rowEnd,
-          rowGap,
-        );
+        const areaWidth =
+          colOffsets[p.colEnd - 1] +
+          colSizes[p.colEnd - 1] -
+          colOffsets[p.colStart];
+        const areaHeight =
+          rowOffsets[p.rowEnd - 1] +
+          rowSizes[p.rowEnd - 1] -
+          rowOffsets[p.rowStart];
         const hPB =
           cm.paddingLeft + cm.paddingRight + cm.borderLeft + cm.borderRight;
         const vPB =
@@ -1499,19 +1517,37 @@ export function solveLayout(
           parentResolvedDims.set(child.id, dims);
         }
         if (typeof child.width !== "number") {
-          const stretched = Math.max(
-            0,
-            areaWidth - cm.marginLeft - cm.marginRight - hPB,
-          );
-          cm.contentWidth = clampCrossContent(child, stretched, hPB, false);
+          const canStretch =
+            gridItemJustify(child, node) === "stretch" &&
+            child.margin.left !== "auto" &&
+            child.margin.right !== "auto";
+          const content = canStretch
+            ? Math.max(0, areaWidth - cm.marginLeft - cm.marginRight - hPB)
+            : computeIntrinsicContentSize(
+                child,
+                "width",
+                nodeMap,
+                boxModelMap,
+                "max-content",
+              );
+          cm.contentWidth = clampCrossContent(child, content, hPB, false);
           dims.add("width");
         }
         if (typeof child.height !== "number") {
-          const stretched = Math.max(
-            0,
-            areaHeight - cm.marginTop - cm.marginBottom - vPB,
-          );
-          cm.contentHeight = clampCrossContent(child, stretched, vPB, true);
+          const canStretch =
+            gridItemAlign(child, node) === "stretch" &&
+            child.margin.top !== "auto" &&
+            child.margin.bottom !== "auto";
+          const content = canStretch
+            ? Math.max(0, areaHeight - cm.marginTop - cm.marginBottom - vPB)
+            : computeIntrinsicContentSize(
+                child,
+                "height",
+                nodeMap,
+                boxModelMap,
+                "max-content",
+              );
+          cm.contentHeight = clampCrossContent(child, content, vPB, true);
           dims.add("height");
         }
       }
@@ -2017,10 +2053,94 @@ export function solveLayout(
           const p = grid.placements.get(child.id);
           if (!p) continue;
           const cm = boxModelMap.get(child.id)!;
+          const areaX = grid.colOffsets[p.colStart];
+          const areaW =
+            grid.colOffsets[p.colEnd - 1] +
+            grid.colSizes[p.colEnd - 1] -
+            areaX;
+          const areaY = grid.rowOffsets[p.rowStart];
+          const areaH =
+            grid.rowOffsets[p.rowEnd - 1] +
+            grid.rowSizes[p.rowEnd - 1] -
+            areaY;
+          const bbW =
+            cm.contentWidth +
+            cm.paddingLeft +
+            cm.paddingRight +
+            cm.borderLeft +
+            cm.borderRight;
+          const bbH =
+            cm.contentHeight +
+            cm.paddingTop +
+            cm.paddingBottom +
+            cm.borderTop +
+            cm.borderBottom;
+
+          // Chromium reports auto margins on grid items as 0; they offset the
+          // item without materializing in the resolved margin box.
+          let offsetX: number;
+          if (child.margin.left === "auto" || child.margin.right === "auto") {
+            const freeW = Math.max(
+              0,
+              areaW - bbW - cm.marginLeft - cm.marginRight,
+            );
+            if (child.margin.left === "auto" && child.margin.right === "auto") {
+              offsetX = cm.marginLeft + freeW / 2;
+            } else if (child.margin.left === "auto") {
+              offsetX = cm.marginLeft + freeW;
+            } else {
+              offsetX = cm.marginLeft;
+            }
+          } else {
+            switch (gridItemJustify(child, node)) {
+              case "end":
+                offsetX = areaW - bbW - cm.marginRight;
+                break;
+              case "center":
+                offsetX =
+                  cm.marginLeft +
+                  (areaW - bbW - cm.marginLeft - cm.marginRight) / 2;
+                break;
+              default:
+                offsetX = cm.marginLeft;
+            }
+          }
+
+          let offsetY: number;
+          if (child.margin.top === "auto" || child.margin.bottom === "auto") {
+            const freeH = Math.max(
+              0,
+              areaH - bbH - cm.marginTop - cm.marginBottom,
+            );
+            if (
+              child.margin.top === "auto" &&
+              child.margin.bottom === "auto"
+            ) {
+              offsetY = cm.marginTop + freeH / 2;
+            } else if (child.margin.top === "auto") {
+              offsetY = cm.marginTop + freeH;
+            } else {
+              offsetY = cm.marginTop;
+            }
+          } else {
+            switch (gridItemAlign(child, node)) {
+              case "end":
+                offsetY = areaH - bbH - cm.marginBottom;
+                break;
+              case "center":
+                offsetY =
+                  cm.marginTop +
+                  (areaH - bbH - cm.marginTop - cm.marginBottom) / 2;
+                break;
+              default:
+                offsetY = cm.marginTop;
+            }
+          }
+
           emitBoxes(
             child,
-            contentBoxX + grid.colOffsets[p.colStart] + cm.marginLeft,
-            contentBoxY + grid.rowOffsets[p.rowStart] + cm.marginTop,
+            contentBoxX + areaX + offsetX,
+            contentBoxY + areaY + offsetY,
             myCB,
           );
         }
