@@ -1,9 +1,24 @@
 import * as fs from "fs";
 import * as path from "path";
 import puppeteer, { Browser } from "puppeteer";
-import { LayoutNode, TrackListEntry } from "../src/types";
+import {
+  BoxSides,
+  LayoutNode,
+  MarginBoxSides,
+  TrackListEntry,
+} from "../src/types";
 import { expandTrackList } from "../src/grid";
 import { gridStyleDeclarations } from "./grid-css";
+
+type GenNode = Omit<
+  LayoutNode,
+  "padding" | "margin" | "border" | "children"
+> & {
+  padding: BoxSides;
+  margin: MarginBoxSides;
+  border: BoxSides;
+  children: GenNode[];
+};
 
 class RNG {
   private seed: number;
@@ -155,7 +170,7 @@ function assignTier21Placements(node: LayoutNode, rng: RNG, cat: number) {
   }
 }
 
-function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
+function genNode(rng: RNG, depth: number, tier: number): GenNode {
   const id = idCounter === 1 ? "root-node" : `node-${idCounter}`;
   idCounter++;
 
@@ -166,7 +181,7 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
   const border = genBoxSides(rng, 10);
   const boxSizing = rng.nextChoice(["content-box", "border-box"] as const);
 
-  const node: LayoutNode = {
+  const node: GenNode = {
     id,
     padding,
     margin,
@@ -2035,7 +2050,7 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
   return node;
 }
 
-function toHTML(node: LayoutNode): string {
+function toHTML(node: GenNode): string {
   const styles: string[] = [
     node.width !== undefined
       ? `width: ${node.width}${typeof node.width === "number" ? "px" : ""}`

@@ -53,6 +53,25 @@ Only `id` is required per node. Everything else has sensible defaults.
 - `options.debug`: `boolean` -- when true, returns a `trace` object with intermediate algorithm state
 - Returns `{ boxes: Map<string, ResolvedBox> }`
 
+### `validateTree(root) => ValidationIssue[]`
+
+The solver itself never validates: it assumes a well-formed tree and stays fast. `validateTree` is the development-time companion — run it in tests or behind a dev flag to catch the mistakes that would otherwise produce a silently wrong layout:
+
+- **errors**: input outside the supported vocabulary — duplicate `id`s (result boxes are keyed by id), percentage or CSS-string sizes (`"50%"`, `"100px"`), unsupported enum values, malformed track lists or grid placements, `NaN` dimensions
+- **warnings**: supported input that hits a documented divergence from browser CSS — a `display: "block"` container with no definite height (resolves to content-height 0), vertical margins in block flow (no margin collapse), `baseline` alignment in grid (treated as `start`), plus typo detection for unknown property names (`"flex-direction"` → `flexDirection`)
+
+Each issue carries `{ nodeId, path, severity, message }`, where `path` locates the node (e.g. `root.children[2]`).
+
+```ts
+import { solveLayout, validateTree } from "...";
+
+if (process.env.NODE_ENV !== "production") {
+  const issues = validateTree(tree);
+  if (issues.length > 0) throw new Error(issues.map((i) => `${i.path}: ${i.message}`).join("\n"));
+}
+const { boxes } = solveLayout(tree);
+```
+
 ### `LayoutNode`
 
 ```ts

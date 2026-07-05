@@ -1,14 +1,17 @@
 {
   "name": "constraint-layout-algo",
   "version": "1.0.0",
-  "description": "Off-DOM CSS layout solver — computes Flexbox positions and sizes without a browser",
+  "description": "Off-DOM CSS layout solver \u2014 computes Flexbox and CSS Grid positions and sizes without a browser",
   "keywords": [
     "css",
     "flexbox",
+    "grid",
+    "css-grid",
     "layout",
     "solver",
     "off-dom",
-    "positioning"
+    "positioning",
+    "layout-testing"
   ],
   "author": "Alec Custer",
   "license": "MIT",
@@ -27,8 +30,10 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
     "test": "tsx tests/runner.ts",
     "test:trace": "tsx tests/trace-comparator.test.ts",
+    "test:validate": "tsx tests/validate.test.ts",
     "test:example": "npm run build && npm --prefix examples/layout-assertions install && npm --prefix examples/layout-assertions test",
     "generate": "tsx tests/generator.ts",
     "probe": "tsx scripts/probe-chromium.ts",

@@ -1,0 +1,240 @@
+import { validateTree } from "../src/validate";
+import type { LayoutNode } from "../src/types";
+
+let passed = 0;
+let failed = 0;
+
+function assert(cond: boolean, label: string) {
+  if (cond) {
+    passed++;
+  } else {
+    failed++;
+    console.error(`  ✗ ${label}`);
+  }
+}
+
+function issuesOf(node: LayoutNode) {
+  return validateTree(node);
+}
+
+function messages(node: LayoutNode): string {
+  return issuesOf(node)
+    .map((i) => `${i.severity}:${i.message}`)
+    .join("\n");
+}
+
+// Valid tree produces no issues
+{
+  const issues = issuesOf({
+    id: "root",
+    display: "grid",
+    width: 400,
+    height: 300,
+    gap: { row: 8, column: 14 },
+    gridTemplateColumns: [240, "auto", "1.5fr", { min: 100, max: "1fr" }],
+    gridTemplateRows: [{ repeat: "auto-fill", tracks: [{ min: 40, max: "max-content" }] }],
+    children: [
+      {
+        id: "a",
+        gridColumn: { start: 1, end: "span 2" },
+        gridRow: { start: -1, end: "auto" },
+        margin: { left: "auto" },
+        measureContent: () => ({ width: 10, height: 10 }),
+      },
+      { id: "b", display: "flex", flexDirection: "column", children: [{ id: "c", flexGrow: 1 }] },
+    ],
+  });
+  assert(issues.length === 0, `valid tree has no issues, got:\n${issues.map((i) => i.message).join("\n")}`);
+}
+
+// Duplicate ids
+{
+  const issues = issuesOf({
+    id: "root",
+    children: [{ id: "x" }, { id: "x" }],
+  });
+  assert(
+    issues.some((i) => i.severity === "error" && i.message.includes(`duplicate id "x"`)),
+    "duplicate id is an error",
+  );
+  assert(
+    issues.some((i) => i.path === "root.children[1]"),
+    "duplicate id names the second occurrence's path",
+  );
+}
+
+// Missing id
+assert(
+  issuesOf({ children: [] } as unknown as LayoutNode).some(
+    (i) => i.severity === "error" && i.message.includes(`"id" is required`),
+  ),
+  "missing id is an error",
+);
+
+// Percentage and CSS-string sizes
+assert(
+  messages({ id: "r", width: "50%" as never }).includes("percentages are not supported"),
+  "percentage width gets the dedicated hint",
+);
+assert(
+  messages({ id: "r", width: "100px" as never }).includes("not a CSS string"),
+  "px string width gets the CSS-string hint",
+);
+assert(
+  messages({ id: "r", flexBasis: "30%" as never }).includes("percentages are not supported"),
+  "percentage flexBasis gets the dedicated hint",
+);
+
+// NaN and bad enums
+assert(
+  messages({ id: "r", minWidth: NaN }).includes(`"minWidth" must be a finite number`),
+  "NaN minWidth is an error",
+);
+assert(
+  messages({ id: "r", justifyContent: "start" as never }).includes(`"justifyContent" must be one of`),
+  "unsupported justifyContent value is an error",
+);
+assert(
+  messages({ id: "r", flexGrow: -1 }).includes(`"flexGrow" must be >= 0`),
+  "negative flexGrow is an error",
+);
+
+// Unknown keys with suggestions
+{
+  const msg = messages({ id: "r", "flex-direction": "row" } as never);
+  assert(
+    msg.includes(`unknown property "flex-direction"`) && msg.includes(`did you mean "flexDirection"`),
+    "hyphenated key suggests the camelCase property",
+  );
+}
+assert(
+  messages({ id: "r", flexdirection: "row" } as never).includes(`did you mean "flexDirection"`),
+  "case-mangled key suggests the real property",
+);
+
+// Box sides
+assert(
+  messages({ id: "r", padding: -4 }).includes(`"padding" must be >= 0`),
+  "negative padding is an error",
+);
+assert(
+  messages({ id: "r", padding: "auto" as never }).includes(`"padding" must be a finite number`),
+  "padding auto is an error",
+);
+assert(
+  issuesOf({ id: "r", margin: { top: "auto", left: 3 } }).length === 0,
+  "margin auto per side is valid",
+);
+
+// Gap
+assert(
+  messages({ id: "r", gap: { row: 4 } as never }).includes(`"gap.column" must be a finite number`),
+  "partial gap object is an error",
+);
+
+// Track lists
+assert(
+  messages({ id: "r", display: "grid", gridTemplateColumns: [-10] }).includes("not a valid track size"),
+  "negative track size is an error",
+);
+assert(
+  messages({ id: "r", display: "grid", gridTemplateColumns: ["2 fr" as never] }).includes("not a valid track size"),
+  "malformed fr string is an error",
+);
+assert(
+  messages({ id: "r", display: "grid", gridTemplateColumns: ["50%" as never] }).includes("percentages are not supported"),
+  "percentage track gets the dedicated hint",
+);
+assert(
+  messages({
+    id: "r",
+    display: "grid",
+    gridTemplateColumns: [{ repeat: 0, tracks: [100] }],
+  }).includes(`"gridTemplateColumns[0].repeat" must be a positive integer`),
+  "repeat count 0 is an error",
+);
+
+// Grid placement
+assert(
+  messages({ id: "r", gridColumn: { start: 0, end: "auto" } }).includes(`"gridColumn.start" must be a non-zero integer`),
+  "grid line 0 is an error",
+);
+assert(
+  messages({ id: "r", gridRow: { start: 1, end: "span 0" as never } }).includes(`"gridRow.end" must be`),
+  "span 0 is an error",
+);
+
+// measureContent
+assert(
+  messages({ id: "r", measureContent: { width: 1, height: 1 } as never }).includes(`"measureContent" must be a function`),
+  "non-function measureContent is an error",
+);
+
+// children shape
+assert(
+  messages({ id: "r", children: {} as never }).includes(`"children" must be an array`),
+  "non-array children is an error",
+);
+
+// Non-goal warnings
+{
+  const issues = issuesOf({
+    id: "r",
+    display: "block",
+    children: [{ id: "c", height: 20 }],
+  });
+  assert(
+    issues.some((i) => i.severity === "warning" && i.message.includes("block containers do not auto-size")),
+    "block container without definite height warns",
+  );
+}
+assert(
+  issuesOf({ id: "r", display: "block", height: 100, children: [{ id: "c", height: 20 }] }).every(
+    (i) => !i.message.includes("auto-size"),
+  ),
+  "block container with definite height does not warn about auto-size",
+);
+{
+  const issues = issuesOf({
+    id: "r",
+    display: "block",
+    height: 100,
+    children: [{ id: "c", height: 20, margin: { top: 10 } }],
+  });
+  assert(
+    issues.some((i) => i.message.includes("margin collapse is not modeled")),
+    "vertical margins in block flow warn about collapse",
+  );
+}
+assert(
+  issuesOf({ id: "r", display: "grid", alignItems: "baseline", height: 10 }).some(
+    (i) => i.severity === "warning" && i.message.includes(`treated as "start"`),
+  ),
+  "grid baseline alignItems warns",
+);
+{
+  const issues = issuesOf({
+    id: "r",
+    display: "grid",
+    gridTemplateColumns: [100],
+    children: [{ id: "c", position: "absolute", gridColumn: { start: 1, end: 2 } }],
+  });
+  assert(
+    issues.some((i) => i.message.includes("absolutely positioned child is ignored")),
+    "grid placement on absolute child warns",
+  );
+}
+assert(
+  issuesOf({ id: "r", children: [{ id: "c", flexBasis: "content", width: 100 }] }).some(
+    (i) => i.severity === "warning" && i.message.includes(`"flexBasis: content" is treated as "auto"`),
+  ),
+  "flexBasis content with definite size warns",
+);
+
+console.log(`\n--- Validate Tests ---`);
+console.log(`Passed: ${passed}`);
+console.log(`Failed: ${failed}`);
+
+if (failed > 0) {
+  process.exit(1);
+}
