@@ -461,6 +461,7 @@ export function solveLayout(
     itemIds: string[];
     crossSize: number;
     crossOffset: number;
+    baselineAscent?: number;
   }
   const containerLineLayouts = new Map<string, LineLayout[]>();
   const parentResolvedDims = new Map<string, Set<"width" | "height">>();
@@ -486,6 +487,33 @@ export function solveLayout(
     }
   }
   resolveAllBoxModels(normalizedRoot);
+
+  // Vertical distance from a node's border-box top to its first baseline.
+  // For an empty box Chromium synthesizes the baseline at the bottom border
+  // edge; a flex container inherits its first in-flow item's baseline.
+  function computeBaselineOffset(node: NormalizedLayoutNode): number {
+    const model = boxModelMap.get(node.id)!;
+    const borderBoxHeight =
+      model.contentHeight +
+      model.paddingTop +
+      model.paddingBottom +
+      model.borderTop +
+      model.borderBottom;
+    if (node.display === "flex") {
+      const items = collectFlexItems(node);
+      if (items.length > 0) {
+        const first = nodeMap.get(items[0])!;
+        const firstModel = boxModelMap.get(first.id)!;
+        return (
+          model.borderTop +
+          model.paddingTop +
+          firstModel.marginTop +
+          computeBaselineOffset(first)
+        );
+      }
+    }
+    return borderBoxHeight;
+  }
 
   // Phase 2: Collect flex items (for flex containers)
   function processNode(node: NormalizedLayoutNode) {
@@ -1037,6 +1065,9 @@ export function solveLayout(
       const lineLayouts: LineLayout[] = [];
       for (const line of lines) {
         let maxOuterCross = 0;
+        let maxAscent = 0;
+        let maxDescent = 0;
+        let hasBaseline = false;
         for (const childId of line.itemIds) {
           const childModel = boxModelMap.get(childId)!;
           const crossPB = isRow
@@ -1055,18 +1086,39 @@ export function solveLayout(
             crossPB,
             isRow,
           );
-          const crossMarg = isRow
-            ? childModel.marginTop + childModel.marginBottom
-            : childModel.marginLeft + childModel.marginRight;
+          const crossMarginStart = isRow
+            ? childModel.marginTop
+            : childModel.marginLeft;
+          const crossMarginEnd = isRow
+            ? childModel.marginBottom
+            : childModel.marginRight;
           maxOuterCross = Math.max(
             maxOuterCross,
-            crossContent + crossPB + crossMarg,
+            crossContent + crossPB + crossMarginStart + crossMarginEnd,
           );
+
+          const effectiveAlign =
+            (child.alignSelf && child.alignSelf !== "auto"
+              ? child.alignSelf
+              : node.alignItems) ?? "stretch";
+          if (effectiveAlign === "baseline") {
+            hasBaseline = true;
+            const bbCross = crossContent + crossPB;
+            const baselineOffset = isRow ? computeBaselineOffset(child) : 0;
+            maxAscent = Math.max(maxAscent, crossMarginStart + baselineOffset);
+            maxDescent = Math.max(
+              maxDescent,
+              crossMarginEnd + (bbCross - baselineOffset),
+            );
+          }
         }
         lineLayouts.push({
           itemIds: [...line.itemIds],
-          crossSize: maxOuterCross,
+          crossSize: hasBaseline
+            ? Math.max(maxOuterCross, maxAscent + maxDescent)
+            : maxOuterCross,
           crossOffset: 0,
+          baselineAscent: hasBaseline ? maxAscent : undefined,
         });
       }
 
@@ -1635,6 +1687,16 @@ export function solveLayout(
               case "center":
                 itemCrossOffset =
                   (lineLayout.crossSize - outerCross) / 2 + crossMarginStart;
+                break;
+              case "baseline":
+                if (lineLayout.baselineAscent !== undefined) {
+                  const baselineOffset = isRow
+                    ? computeBaselineOffset(child)
+                    : 0;
+                  itemCrossOffset = lineLayout.baselineAscent - baselineOffset;
+                } else {
+                  itemCrossOffset = crossMarginStart;
+                }
                 break;
               case "flex-start":
               default:

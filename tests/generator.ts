@@ -32,6 +32,7 @@ function genBoxSides(rng: RNG, max: number) {
 let idCounter = 1;
 let tier10Config = { category: 0, maxDepth: 1 };
 let tier13Config = { category: 0 };
+let tier15Config = { category: 0 };
 
 function genGap(rng: RNG): number | { row: number; column: number } {
   return rng.next() < 0.5
@@ -831,6 +832,101 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
       if (rng.next() < 0.5) node.minHeight = rng.nextRange(20, 120);
       if (rng.next() < 0.5) node.maxHeight = rng.nextRange(60, 250);
     }
+  } else if (tier === 15) {
+    // Tier 15: align-items/align-self baseline.
+    // cat 0: row, alignItems baseline, fixed height, leaf items.
+    // cat 1: row, alignItems baseline, AUTO height (line cross = maxAscent+maxDescent).
+    // cat 2: row, wrap, alignItems baseline, align-content — per-line baseline groups.
+    // cat 3: row, container uses another alignItems; subset of items alignSelf baseline.
+    // cat 4: row, alignItems baseline, some items are nested flex containers (depth 2).
+    // cat 5: column direction, alignItems baseline (fallback to flex-start).
+    const cat = tier15Config.category;
+    if (cat === 4) {
+      if (depth === 2) {
+        node.display = "flex";
+        node.flexDirection = "row";
+        node.flexWrap = "nowrap";
+        node.width = rng.nextRange(400, 800);
+        node.height = rng.nextRange(220, 420);
+        node.alignItems = "baseline";
+        if (rng.next() < 0.3) {
+          node.justifyContent = rng.nextChoice([
+            "flex-start",
+            "center",
+            "space-between",
+          ] as const);
+        }
+      } else if (depth === 1) {
+        const isNested = rng.next() < 0.55;
+        if (isNested) {
+          // Nested flex container as a baseline item. Default alignItems (stretch)
+          // keeps the first child at cross-start so its baseline is well-defined.
+          node.display = "flex";
+          node.flexDirection = rng.nextChoice(["row", "column"] as const);
+          node.flexWrap = "nowrap";
+          if (rng.next() < 0.5) node.width = rng.nextRange(70, 180);
+          node.flexGrow = 0;
+          node.flexShrink = rng.nextChoice([0, 1] as const);
+        } else {
+          isLeaf = true;
+          node.height = rng.nextRange(30, 150);
+          node.width = rng.nextRange(30, 120);
+          node.flexGrow = 0;
+          node.flexShrink = rng.nextChoice([0, 1] as const);
+        }
+      } else {
+        // Grandchild leaf: definite height keeps the nested baseline stable.
+        node.height = rng.nextRange(20, 90);
+        node.width = rng.nextRange(20, 90);
+        node.flexGrow = 0;
+        node.flexShrink = rng.nextChoice([0, 1] as const);
+      }
+    } else if (depth > 0) {
+      node.display = "flex";
+      node.flexDirection = cat === 5 ? "column" : "row";
+      node.flexWrap = cat === 2 ? rng.nextChoice(["wrap", "wrap", "nowrap"] as const) : "nowrap";
+      node.width = rng.nextRange(cat === 2 ? 200 : 350, cat === 2 ? 420 : 720);
+      if (cat === 1 || cat === 2) {
+        // Auto cross size: container height derives from baseline line math.
+        if (cat === 2) node.height = rng.nextRange(250, 500);
+      } else {
+        node.height = rng.nextRange(220, 460);
+      }
+      if (cat === 3) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      } else {
+        node.alignItems = "baseline";
+      }
+      if (cat === 2) {
+        node.alignContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+          "space-between",
+          "space-around",
+        ] as const);
+      }
+    } else {
+      // Leaf item with a varied box model so baselines differ.
+      if (rng.next() < 0.85) node.height = rng.nextRange(20, 150);
+      node.width = rng.nextRange(30, 130);
+      node.flexGrow = 0;
+      node.flexShrink = rng.nextChoice([0, 1] as const);
+      if (cat === 3) {
+        node.alignSelf =
+          rng.next() < 0.55
+            ? "baseline"
+            : rng.nextChoice(["auto", "flex-start", "center"] as const);
+      } else if (cat !== 5 && rng.next() < 0.2) {
+        node.alignSelf = rng.nextChoice(["baseline", "auto"] as const);
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -952,6 +1048,10 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                       : tier13Config.category === 5
                         ? rng.nextRange(2, 4)
                         : rng.nextRange(2, 5)
+                    : tier === 15
+                      ? tier15Config.category === 2
+                        ? rng.nextRange(4, 8)
+                        : rng.nextRange(3, 6)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -1055,6 +1155,9 @@ async function generateFixtures(
     if (tier === 13) {
       tier13Config.category = i % 6;
     }
+    if (tier === 15) {
+      tier15Config.category = i % 6;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -1065,6 +1168,10 @@ async function generateFixtures(
             ? tier13Config.category === 5
               ? 2
               : 1
+            : tier === 15
+              ? tier15Config.category === 4
+                ? 2
+                : 1
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||
                 tier === 9 ||
