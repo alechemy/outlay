@@ -15,6 +15,7 @@ import {
 import {
     GridLayoutInfo,
     TrackItemContribution,
+    expandAutoRepeat,
     expandTrackList,
     gridItemAlign,
     gridItemJustify,
@@ -1441,8 +1442,23 @@ export function solveLayout(
     } else if (node.display === "grid") {
       const model = boxModelMap.get(node.id)!;
       const { main: colGap, cross: rowGap } = resolveGaps(node, true);
-      const colTracks = expandTrackList(node.gridTemplateColumns);
-      const rowTracks = expandTrackList(node.gridTemplateRows);
+      const resolvedDims = parentResolvedDims.get(node.id);
+      const widthDefinite =
+        typeof node.width === "number" || resolvedDims?.has("width") === true;
+      const heightDefinite =
+        typeof node.height === "number" || resolvedDims?.has("height") === true;
+      const colExpansion = expandAutoRepeat(
+        node.gridTemplateColumns,
+        widthDefinite ? model.contentWidth : undefined,
+        colGap,
+      );
+      const rowExpansion = expandAutoRepeat(
+        node.gridTemplateRows,
+        heightDefinite ? model.contentHeight : undefined,
+        rowGap,
+      );
+      const colTracks = colExpansion.tracks;
+      const rowTracks = rowExpansion.tracks;
       const gridItems = node.children.filter((child) => {
         const pos = child.position ?? "static";
         return (
@@ -1540,11 +1556,38 @@ export function solveLayout(
         });
       }
 
-      const resolvedDims = parentResolvedDims.get(node.id);
-      const widthDefinite =
-        typeof node.width === "number" || resolvedDims?.has("width") === true;
-      const heightDefinite =
-        typeof node.height === "number" || resolvedDims?.has("height") === true;
+      let collapsedCols: boolean[] | undefined;
+      if (colExpansion.autoFitEnd > colExpansion.autoFitStart) {
+        collapsedCols = new Array<boolean>(colCount).fill(false);
+        for (
+          let i = colExpansion.autoFitStart;
+          i < colExpansion.autoFitEnd;
+          i++
+        ) {
+          collapsedCols[i] = true;
+        }
+        for (const p of placements.values()) {
+          for (let i = p.colStart; i < p.colEnd && i < colCount; i++) {
+            collapsedCols[i] = false;
+          }
+        }
+      }
+      let collapsedRows: boolean[] | undefined;
+      if (rowExpansion.autoFitEnd > rowExpansion.autoFitStart) {
+        collapsedRows = new Array<boolean>(rowCount).fill(false);
+        for (
+          let i = rowExpansion.autoFitStart;
+          i < rowExpansion.autoFitEnd;
+          i++
+        ) {
+          collapsedRows[i] = true;
+        }
+        for (const p of placements.values()) {
+          for (let i = p.rowStart; i < p.rowEnd && i < rowCount; i++) {
+            collapsedRows[i] = false;
+          }
+        }
+      }
 
       const colSizes = resolveTrackSizes(
         colTrackList,
@@ -1553,6 +1596,8 @@ export function solveLayout(
         widthDefinite ? model.contentWidth : undefined,
         colItems,
         node.justifyContent === undefined,
+        true,
+        collapsedCols,
       );
       const rowSizes = resolveTrackSizes(
         rowTrackList,
@@ -1561,12 +1606,19 @@ export function solveLayout(
         heightDefinite ? model.contentHeight : undefined,
         rowItems,
         node.alignContent === undefined || node.alignContent === "stretch",
+        true,
+        collapsedRows,
       );
 
       if (!heightDefinite) {
-        const trackHeight =
-          rowSizes.reduce((a, b) => a + b, 0) +
-          rowGap * Math.max(0, rowSizes.length - 1);
+        let visibleRows = 0;
+        let trackHeight = 0;
+        for (let i = 0; i < rowSizes.length; i++) {
+          if (collapsedRows?.[i]) continue;
+          visibleRows++;
+          trackHeight += rowSizes[i];
+        }
+        trackHeight += rowGap * Math.max(0, visibleRows - 1);
         model.contentHeight = clampCrossContent(
           node,
           trackHeight,
@@ -1583,12 +1635,14 @@ export function solveLayout(
         colGap,
         widthDefinite ? model.contentWidth : undefined,
         node.justifyContent,
+        collapsedCols,
       );
       const rowOffsets = trackOffsets(
         rowSizes,
         rowGap,
         heightDefinite ? model.contentHeight : undefined,
         node.alignContent,
+        collapsedRows,
       );
       containerGridLayouts.set(node.id, {
         colSizes,

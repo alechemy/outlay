@@ -1,6 +1,7 @@
 import {
   NormalizedLayoutNode,
   TrackListEntry,
+  TrackRepeat,
   TrackSize,
 } from "./types.js";
 
@@ -33,6 +34,82 @@ export function expandTrackList(
     }
   }
   return out;
+}
+
+function trackMinSize(t: TrackSize): number {
+  if (typeof t === "number") return t;
+  if (typeof t === "object" && t !== null && typeof t.min === "number") {
+    return t.min;
+  }
+  return 0;
+}
+
+/**
+ * Expands a track list, resolving one repeat(auto-fill|auto-fit) against the
+ * definite axis size (count 1 when indefinite). Returns the index range of
+ * auto-fit-produced tracks so unoccupied ones can collapse.
+ */
+export function expandAutoRepeat(
+  entries: TrackListEntry[] | undefined,
+  available: number | undefined,
+  gap: number,
+): { tracks: TrackSize[]; autoFitStart: number; autoFitEnd: number } {
+  if (!entries) return { tracks: [], autoFitStart: 0, autoFitEnd: 0 };
+  const auto = entries.find(
+    (e) =>
+      typeof e === "object" &&
+      e !== null &&
+      "repeat" in e &&
+      typeof e.repeat === "string",
+  ) as TrackRepeat | undefined;
+  if (!auto) {
+    return { tracks: expandTrackList(entries), autoFitStart: 0, autoFitEnd: 0 };
+  }
+
+  let fixedSum = 0;
+  let fixedCount = 0;
+  for (const e of entries) {
+    if (e === auto) continue;
+    const ts =
+      typeof e === "object" && e !== null && "repeat" in e
+        ? expandTrackList([e])
+        : [e as TrackSize];
+    for (const t of ts) {
+      fixedSum += trackMinSize(t);
+      fixedCount++;
+    }
+  }
+  const repeatLen = auto.tracks.length;
+  const repeatSum = auto.tracks.reduce(
+    (a: number, t: TrackSize) => a + trackMinSize(t),
+    0,
+  );
+  let count = 1;
+  if (available !== undefined && repeatSum + gap * repeatLen > 0) {
+    count = Math.max(
+      1,
+      Math.floor(
+        (available - fixedSum - gap * fixedCount + gap) /
+          (repeatSum + gap * repeatLen),
+      ),
+    );
+  }
+
+  const tracks: TrackSize[] = [];
+  let autoFitStart = 0;
+  let autoFitEnd = 0;
+  for (const e of entries) {
+    if (e === auto) {
+      if (auto.repeat === "auto-fit") autoFitStart = tracks.length;
+      for (let i = 0; i < count; i++) tracks.push(...auto.tracks);
+      if (auto.repeat === "auto-fit") autoFitEnd = tracks.length;
+    } else if (typeof e === "object" && e !== null && "repeat" in e) {
+      tracks.push(...expandTrackList([e]));
+    } else {
+      tracks.push(e);
+    }
+  }
+  return { tracks, autoFitStart, autoFitEnd };
 }
 
 // 1-based grid line → 0-based track boundary; negative lines count from the
@@ -266,6 +343,7 @@ export function resolveTrackSizes(
   items: TrackItemContribution[],
   stretchTracks = true,
   equalizeFrWhenIndefinite = true,
+  collapsed?: boolean[],
 ): number[] {
   // Span-1 contributions feed intrinsic bases and growth limits directly.
   const minContributions = new Array<number>(count).fill(0);
@@ -292,6 +370,15 @@ export function resolveTrackSizes(
   const intrinsicMax: boolean[] = [];
 
   for (let i = 0; i < count; i++) {
+    if (collapsed?.[i]) {
+      sizes.push(0);
+      limits.push(0);
+      factors.push(null);
+      stretchable.push(false);
+      intrinsicMin.push(false);
+      intrinsicMax.push(false);
+      continue;
+    }
     const t = tracks[i] ?? "auto";
     const minC = minContributions[i] ?? 0;
     const maxC = maxContributions[i] ?? 0;
@@ -490,7 +577,14 @@ export function resolveTrackSizes(
     return sizes;
   }
 
-  const innerSpace = available - gap * Math.max(0, count - 1);
+  let visibleCount = count;
+  if (collapsed) {
+    visibleCount = 0;
+    for (let i = 0; i < count; i++) {
+      if (!collapsed[i]) visibleCount++;
+    }
+  }
+  const innerSpace = available - gap * Math.max(0, visibleCount - 1);
 
   // §12.6 maximize: equal shares up to growth limits
   let free = innerSpace;
@@ -585,10 +679,17 @@ export function trackOffsets(
   gap: number,
   available?: number,
   distribution?: ContentDistribution,
+  collapsed?: boolean[],
 ): number[] {
   let lead = 0;
   let extra = 0;
-  const n = sizes.length;
+  let n = sizes.length;
+  if (collapsed) {
+    n = 0;
+    for (let i = 0; i < sizes.length; i++) {
+      if (!collapsed[i]) n++;
+    }
+  }
   if (available !== undefined && distribution !== undefined && n > 0) {
     let free = available - gap * Math.max(0, n - 1);
     for (const s of sizes) free -= s;
@@ -620,9 +721,15 @@ export function trackOffsets(
   }
   const offsets: number[] = [];
   let pos = lead;
-  for (const size of sizes) {
+  let seenVisible = false;
+  for (let i = 0; i < sizes.length; i++) {
+    const isCollapsed = collapsed?.[i] === true;
+    if (!isCollapsed) {
+      if (seenVisible) pos += gap + extra;
+      seenVisible = true;
+    }
     offsets.push(pos);
-    pos += size + gap + extra;
+    pos += sizes[i];
   }
   return offsets;
 }
