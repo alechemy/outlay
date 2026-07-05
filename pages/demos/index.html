@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%232f9e44'/><path d='M6.5 2v12M2 6.5h12' stroke='white' stroke-width='1.6'/></svg>">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>outlay — demos</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      :root {
+        color-scheme: light;
+        --ink: #16222c;
+        --muted: #5a6b7a;
+        --rule: #d5dde4;
+        --grid: #e9eff3;
+        --accent: #1e7e34;
+        --accent-bright: #2f9e44;
+        --selected: #e3f2e6;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        background-color: #fdfefe;
+        background-image:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+        background-size: 28px 28px;
+        font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+      .page {
+        width: min(960px, calc(100vw - 40px));
+        margin: 0 auto;
+        padding: 48px 0 64px;
+      }
+      header {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+      }
+      header svg {
+        width: 30px;
+        height: 30px;
+        align-self: center;
+        flex-shrink: 0;
+      }
+      h1 {
+        margin: 0;
+        font-size: 32px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+      h1 a {
+        color: inherit;
+        text-decoration: none;
+      }
+      h1 a:hover {
+        color: var(--accent);
+      }
+      .slash {
+        font-size: 26px;
+        color: var(--rule);
+      }
+      .section {
+        font: 600 15px/1 ui-monospace, "SF Mono", Menlo, monospace;
+        color: var(--accent);
+        letter-spacing: 0.05em;
+      }
+      .spacer { flex: 1; }
+      .top-links {
+        font: 600 12px/1 ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      .top-links a {
+        color: var(--muted);
+        text-decoration: none;
+        margin-left: 14px;
+      }
+      .top-links a:hover { color: var(--accent); }
+      .intro {
+        margin: 18px 0 0;
+        max-width: 62ch;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+      .intro code {
+        font: 13px ui-monospace, "SF Mono", Menlo, monospace;
+        background: var(--selected);
+        padding: 1px 5px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin-top: 30px;
+      }
+      .card {
+        display: block;
+        padding: 18px 20px 20px;
+        border: 1.5px solid var(--rule);
+        background: #fff;
+        color: inherit;
+        text-decoration: none;
+        transition: border-color 120ms ease;
+      }
+      .card:hover {
+        border-color: var(--accent-bright);
+        box-shadow: 4px 4px 0 var(--selected);
+      }
+      .card .num {
+        font: 600 12px/1 ui-monospace, "SF Mono", Menlo, monospace;
+        color: var(--accent);
+        letter-spacing: 0.06em;
+      }
+      .card h2 {
+        margin: 8px 0 0;
+        font-size: 19px;
+        line-height: 1.25;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .card p {
+        margin: 10px 0 0;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .card code {
+        font: 13px ui-monospace, "SF Mono", Menlo, monospace;
+        background: var(--selected);
+        padding: 0 4px;
+      }
+      @media (max-width: 760px) {
+        .page { padding-top: 30px; }
+        .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2f9e44"/><path d="M6.5 2v12M2 6.5h12" stroke="white" stroke-width="1.6"/></svg>
+        <h1><a href="../index.html">outlay</a></h1>
+        <span class="slash">/</span>
+        <span class="section">demos</span>
+        <span class="spacer"></span>
+        <nav class="top-links" aria-label="Project links">
+          <a href="https://github.com/alechemy/outlay">github</a>
+          <a href="https://www.npmjs.com/package/outlay">npm</a>
+        </nav>
+      </header>
+      <p class="intro">
+        Every demo computes positions with <code>solveLayout</code> and renders
+        the numbers — the CSS layout engine never runs. Where a browser
+        reference pane exists, a badge compares the two live.
+      </p>
+
+      <section class="grid" aria-label="Demo list">
+        <a class="card" href="explorer.html">
+          <span class="num">01</span>
+          <h2>Layout Explorer</h2>
+          <p>
+            Build flex and grid layouts visually with an interactive tree editor.
+            Tweak properties with sliders and see the solver's output beside the
+            live browser reference in real time.
+          </p>
+        </a>
+        <a class="card" href="transitions.html">
+          <span class="num">02</span>
+          <h2>Animated Layout Transitions</h2>
+          <p>
+            Toggle a flex property and every box glides to its new position. The
+            solver hands you both the before and after layouts as numbers, so each
+            box is interpolated between endpoints — no CSS transitions, no FLIP.
+          </p>
+        </a>
+        <a class="card" href="drag-reorder.html">
+          <span class="num">03</span>
+          <h2>Drag-and-Drop Reorder</h2>
+          <p>
+            A sortable grid of cards. Dragging re-solves the whole layout on every
+            pointer move to preview the drop, and cards glide via
+            <code>transform</code> — zero DOM reflow during the entire drag.
+          </p>
+        </a>
+        <a class="card" href="virtual-scroll.html">
+          <span class="num">04</span>
+          <h2>Virtual Scroll</h2>
+          <p>
+            10,000 variable-height rows, every position solved up front in one
+            pass. Only the visible slice is in the DOM, and there are no height
+            estimates or scroll-jump corrections. Heights come from Pretext.
+          </p>
+        </a>
+        <a class="card" href="text-layout.html">
+          <span class="num">05</span>
+          <h2>Text-driven layout</h2>
+          <p>
+            A grid of text cards sized off-DOM. Pretext measures the text through
+            a <code>measureContent</code> adapter; a width slider reflows the
+            cards and a badge checks the solver against the real browser.
+          </p>
+        </a>
+        <a class="card" href="dashboard.html">
+          <span class="num">06</span>
+          <h2>Nested Dashboard</h2>
+          <p>
+            A responsive dashboard — header, sidebar, and a grid of cards — solved
+            off-DOM and rendered with absolute positioning. Toggle to the native
+            CSS rendering to see the two lay out identically.
+          </p>
+        </a>
+        <a class="card" href="server-layout/example-output.svg">
+          <span class="num">07</span>
+          <h2>Server-Side Layout →</h2>
+          <p>
+            No browser, no DOM: a Node script reads a component tree from JSON,
+            runs <code>solveLayout</code>, and writes an SVG. This card links to
+            the SVG it generated. Source in <code>pages/demos/server-layout/</code>.
+          </p>
+        </a>
+      </section>
+    </main>
+  </body>
+</html>
