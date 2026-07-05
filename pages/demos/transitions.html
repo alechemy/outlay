@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Animated Layout Transitions — constraint-layout-algo</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      :root {
+        color-scheme: light;
+        --page: #f5f1ea;
+        --panel: #fffdf8;
+        --ink: #201b18;
+        --muted: #6d645d;
+        --rule: #d8cec3;
+        --accent: #955f3b;
+        --accent-light: #c4865e;
+        --selected: #f0e4d6;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(180deg, #fbf7f0 0%, var(--page) 100%);
+        color: var(--ink);
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+      .page {
+        width: min(940px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+      a.back {
+        font:
+          12px/1.2 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a.back:hover {
+        text-decoration: underline;
+      }
+      .eyebrow {
+        margin: 12px 0 6px;
+        font:
+          12px/1.2 "SF Mono",
+          ui-monospace,
+          monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      h1 {
+        margin: 0;
+        font:
+          700 30px/1.08 Georgia,
+          "Times New Roman",
+          serif;
+      }
+      .intro {
+        margin: 10px 0 0;
+        max-width: 66ch;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .intro code {
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        padding: 0 4px;
+        font:
+          12px/1.4 "SF Mono",
+          ui-monospace,
+          monospace;
+      }
+
+      .controls {
+        margin-top: 22px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px 28px;
+      }
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .control-group .label {
+        font:
+          600 11px/1.2 "Helvetica Neue",
+          Helvetica,
+          Arial,
+          sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--panel);
+      }
+      .seg button {
+        font:
+          500 12px/1 "SF Mono",
+          ui-monospace,
+          monospace;
+        border: none;
+        border-right: 1px solid var(--rule);
+        background: transparent;
+        color: var(--ink);
+        padding: 7px 11px;
+        cursor: pointer;
+        transition:
+          background 100ms,
+          color 100ms;
+      }
+      .seg button:last-child {
+        border-right: none;
+      }
+      .seg button:hover {
+        background: #faf3ea;
+      }
+      .seg button.active {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .stage-wrap {
+        margin-top: 26px;
+        position: relative;
+      }
+      .stage {
+        position: relative;
+        margin: 0 auto;
+        border: 1px dashed var(--rule);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--panel) 92%, white 8%);
+        box-shadow: 0 18px 40px rgb(54 40 23 / 0.08);
+      }
+      .anim-box {
+        position: absolute;
+        border-radius: 8px;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font:
+          600 14px/1 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: rgba(32, 27, 24, 0.55);
+        will-change: left, top, width, height;
+        box-shadow: 0 2px 6px rgb(54 40 23 / 0.08);
+      }
+      .badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        font:
+          11px/1.4 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--muted);
+        background: rgba(255, 253, 248, 0.88);
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        padding: 5px 9px;
+        text-align: right;
+        pointer-events: none;
+      }
+      .badge strong {
+        color: var(--accent);
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <a class="back" href="/demos/index.html">← all demos</a>
+      <p class="eyebrow">constraint-layout-algo</p>
+      <h1>Animated Layout Transitions</h1>
+      <p class="intro">
+        Toggle a flex property and every box glides to its new spot. There are no
+        CSS transitions and no FLIP measurement here: the solver computes the
+        <em>before</em> and <em>after</em> layouts as plain numbers, and each box
+        is interpolated from one <code>(x, y, w, h)</code> to the other. Having
+        layout as arithmetic means both endpoints are yours to tween — something
+        CSS can't hand you once the property has changed.
+      </p>
+
+      <div class="controls" id="controls"></div>
+
+      <div class="stage-wrap">
+        <div class="stage" id="stage">
+          <div class="badge" id="badge"></div>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="./transitions.ts"></script>
+  </body>
+</html>
