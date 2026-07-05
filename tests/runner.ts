@@ -51,6 +51,7 @@ function runTests() {
       seed,
       tier,
       contentMeasurements,
+      textMeasurements,
     } = fixture;
     const nodeCount = Object.keys(expected).length;
 
@@ -69,6 +70,37 @@ function runTests() {
         }
       }
       attachMeasureContent(input);
+    }
+
+    // Attach measureContent from captured word widths via greedy line breaking.
+    if (textMeasurements) {
+      function attachTextMeasure(node: any) {
+        const data = textMeasurements[node.id];
+        if (data) {
+          const { wordWidths, spaceWidth, lineHeight } = data;
+          node.measureContent = (availableWidth: number) => {
+            if (wordWidths.length === 0) return { width: 0, height: 0 };
+            let lines = 1;
+            let cur = wordWidths[0];
+            let maxLine = cur;
+            for (let i = 1; i < wordWidths.length; i++) {
+              const w = wordWidths[i];
+              if (cur + spaceWidth + w <= availableWidth) {
+                cur += spaceWidth + w;
+              } else {
+                lines++;
+                cur = w;
+              }
+              if (cur > maxLine) maxLine = cur;
+            }
+            return { width: maxLine, height: lines * lineHeight };
+          };
+        }
+        if (node.children) {
+          for (const child of node.children) attachTextMeasure(child);
+        }
+      }
+      attachTextMeasure(input);
     }
 
     if (!tierStats[tier]) {

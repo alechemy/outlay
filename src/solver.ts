@@ -668,6 +668,42 @@ export function solveLayout(
       const { main: mainGap, cross: crossGap } = resolveGaps(node, isRow);
       const parentModel = boxModelMap.get(node.id)!;
 
+      const crossDefiniteContainer = isRow
+        ? typeof node.height === "number" ||
+          (parentResolvedDims.get(node.id)?.has("height") ?? false)
+        : typeof node.width === "number" ||
+          (parentResolvedDims.get(node.id)?.has("width") ?? false);
+
+      // Column flex: a width-dependent item's main size (block height) is its
+      // wrapped height at the used inline size, and min-height:auto floors from
+      // the same value (not from a zero-width measurement).
+      const columnTextMetrics = (
+        child: NormalizedLayoutNode,
+        childModel: ResolvedBoxModel,
+      ): { usedWidth: number; height: number } | null => {
+        if (isRow || typeof child.width === "number") return null;
+        if (!child.measureContent || !crossDefiniteContainer) return null;
+        const maxCW = child.measureContent(Infinity).width;
+        const minCW = child.measureContent(0).width;
+        if (maxCW === minCW) return null;
+        const m = childModel.marginLeft + childModel.marginRight;
+        const pb =
+          childModel.paddingLeft +
+          childModel.paddingRight +
+          childModel.borderLeft +
+          childModel.borderRight;
+        const availCross = Math.max(0, parentModel.contentWidth - m - pb);
+        const align =
+          child.alignSelf && child.alignSelf !== "auto"
+            ? child.alignSelf
+            : (node.alignItems ?? "stretch");
+        const usedWidth =
+          align === "stretch"
+            ? availCross
+            : Math.min(maxCW, Math.max(minCW, availCross));
+        return { usedWidth, height: child.measureContent(usedWidth).height };
+      };
+
       // Phase 3: Determine hypothetical main sizes
       const hypoMainSizes = new Map<string, number>();
       for (const childId of itemOrder) {
@@ -703,9 +739,14 @@ export function solveLayout(
           typeof child[mainDim] !== "number"
         ) {
           // Content-based sizing: flex-basis auto/content with measureContent
-          const measured = child.measureContent(Infinity);
-          const contentMain = isRow ? measured.width : measured.height;
-          mainSize = contentMain + pb;
+          const ctm = columnTextMetrics(child, childModel);
+          if (ctm) {
+            mainSize = ctm.height + pb;
+          } else {
+            const measured = child.measureContent(Infinity);
+            const contentMain = isRow ? measured.width : measured.height;
+            mainSize = contentMain + pb;
+          }
         } else {
           mainSize = determineHypotheticalMainSize(child, childModel, isRow);
         }
@@ -725,6 +766,32 @@ export function solveLayout(
           }
           if (maxMain < minMain) maxMain = minMain;
           mainSize = Math.max(minMain, Math.min(maxMain, mainSize));
+        }
+
+        // Content-based automatic minimum (min-width/height:auto) floors the
+        // hypothetical main size for width-dependent (text) items, so line
+        // breaking and auto container sizing see the wrapped extent; capped by
+        // a definite max main size.
+        let autoFloor: number | undefined;
+        if (isRow) {
+          if (child.measureContent && typeof child.width !== "number") {
+            const minCW = child.measureContent(0).width;
+            if (minCW !== child.measureContent(Infinity).width) {
+              autoFloor = minCW + pb;
+            }
+          }
+        } else {
+          const ctm = columnTextMetrics(child, childModel);
+          if (ctm) autoFloor = ctm.height + pb;
+        }
+        if (autoFloor !== undefined) {
+          const mMax = isRow ? child.maxWidth : child.maxHeight;
+          if (mMax !== undefined) {
+            const maxMain =
+              child.boxSizing === "border-box" ? mMax : mMax + pb;
+            autoFloor = Math.min(autoFloor, maxMain);
+          }
+          mainSize = Math.max(mainSize, autoFloor);
         }
 
         hypoMainSizes.set(childId, mainSize);
@@ -850,8 +917,13 @@ export function solveLayout(
             child.measureContent &&
             typeof child[mainDimProp] !== "number"
           ) {
-            const measured = child.measureContent(Infinity);
-            flexBaseSize = isRow ? measured.width : measured.height;
+            const ctm = columnTextMetrics(child, childModel);
+            if (ctm) {
+              flexBaseSize = ctm.height;
+            } else {
+              const measured = child.measureContent(Infinity);
+              flexBaseSize = isRow ? measured.width : measured.height;
+            }
           } else {
             flexBaseSize = isRow
               ? childModel.contentWidth
@@ -861,6 +933,7 @@ export function solveLayout(
           // Min/max in content-box terms
           let minContent = 0;
           let maxContent = Infinity;
+          let autoMinFromContent = false;
           if (isRow) {
             if (child.minWidth !== undefined) {
               minContent =
@@ -892,6 +965,7 @@ export function solveLayout(
             } else if (child.measureContent) {
               const measured = child.measureContent(0);
               minContent = measured.width;
+              autoMinFromContent = true;
             }
             if (child.maxWidth !== undefined) {
               maxContent =
@@ -926,8 +1000,9 @@ export function solveLayout(
                 minContent = contentMin;
               }
             } else if (child.measureContent) {
-              const measured = child.measureContent(0);
-              minContent = measured.height;
+              const ctm = columnTextMetrics(child, childModel);
+              minContent = ctm ? ctm.height : child.measureContent(0).height;
+              autoMinFromContent = true;
             }
             if (child.maxHeight !== undefined) {
               maxContent =
@@ -936,7 +1011,12 @@ export function solveLayout(
                   : child.maxHeight;
             }
           }
-          if (maxContent < minContent) maxContent = minContent;
+          if (maxContent < minContent) {
+            // A content-based automatic minimum is capped by a definite max
+            // main size; an explicit minimum wins over the max.
+            if (autoMinFromContent) minContent = maxContent;
+            else maxContent = minContent;
+          }
 
           // Hypothetical main size = clamped flex base size (spec 9.3 step 4)
           const hypoMainSize = Math.max(
@@ -1209,13 +1289,14 @@ export function solveLayout(
               const resolvedMainContent = isRow
                 ? childModel.contentWidth
                 : childModel.contentHeight;
-              const measured = child.measureContent(
-                isRow ? resolvedMainContent : Infinity,
-              );
               if (isRow) {
-                childModel.contentHeight = measured.height;
+                childModel.contentHeight =
+                  child.measureContent(resolvedMainContent).height;
               } else {
-                childModel.contentWidth = measured.width;
+                const ctm = columnTextMetrics(child, childModel);
+                childModel.contentWidth = ctm
+                  ? ctm.usedWidth
+                  : child.measureContent(Infinity).width;
               }
             }
           }

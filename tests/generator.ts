@@ -44,6 +44,24 @@ let tier21Config = { category: 0 };
 let tier22Config = { category: 0 };
 let tier23Config = { category: 0 };
 let tier24Config = { category: 0 };
+let tier26Config = { category: 0 };
+let tier27Config = { category: 0 };
+
+const TEXT_FONT = "16px Arial";
+const TEXT_LINE_HEIGHT = 20;
+const TEXT_CORPUS = [
+  "a", "in", "to", "of", "the", "and", "for", "box", "grid", "flex", "word",
+  "line", "text", "wrap", "layout", "column", "render", "spacing", "measure",
+  "content", "wrapping", "container", "constraint", "typography", "dimension",
+  "alignment", "distribution", "hyphenation", "internationalization",
+];
+
+function genTextString(rng: RNG, minWords: number, maxWords: number): string {
+  const n = rng.nextRange(minWords, maxWords);
+  const words: string[] = [];
+  for (let i = 0; i < n; i++) words.push(rng.nextChoice(TEXT_CORPUS));
+  return words.join(" ");
+}
 
 function maybeLiteralAuto(node: LayoutNode, rng: RNG, depth: number) {
   if (node.width === undefined && rng.next() < 0.15) node.width = "auto";
@@ -1565,6 +1583,120 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
         if (rng.next() < 0.6) node.height = rng.nextRange(20, 90);
       }
     }
+  } else if (tier === 26) {
+    // Text-driven flex items: wrapped height depends on the resolved main size.
+    // cat 0: row nowrap; cat 1: row wrap; cat 2: column; cat 3: row w/ min/max.
+    const cat = tier26Config.category;
+    if (depth > 0) {
+      node.display = "flex";
+      node.flexWrap = cat === 1 ? "wrap" : "nowrap";
+      if (cat === 2) {
+        node.flexDirection = "column";
+        node.width = rng.nextRange(120, 320);
+        if (rng.next() < 0.5) node.height = rng.nextRange(200, 480);
+      } else {
+        node.flexDirection = "row";
+        node.width = rng.nextRange(180, 460);
+        node.height = rng.nextRange(120, 360);
+      }
+      if (rng.next() < 0.5) node.gap = genGap(rng);
+      if (rng.next() < 0.5) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+      if (rng.next() < 0.3) {
+        node.justifyContent = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "space-between",
+        ] as const);
+      }
+    } else {
+      isLeaf = true;
+      if (rng.next() < 0.75) {
+        (node as any)._text = genTextString(rng, 2, 10);
+        node.flexGrow = rng.nextChoice([0, 0, 1, 2] as const);
+        node.flexShrink = rng.nextChoice([0, 1, 1] as const);
+        if (cat === 3) {
+          if (rng.next() < 0.5) node.flexBasis = rng.nextRange(30, 120);
+          if (rng.next() < 0.5) node.minWidth = rng.nextRange(20, 80);
+          if (rng.next() < 0.4) node.maxWidth = rng.nextRange(120, 260);
+        } else if (rng.next() < 0.3) {
+          node.flexBasis =
+            rng.next() < 0.5 ? ("content" as const) : rng.nextRange(30, 120);
+        }
+      } else {
+        node.width = rng.nextRange(30, 140);
+        node.height = rng.nextRange(20, 90);
+        node.flexGrow = rng.nextChoice([0, 0, 1] as const);
+        node.flexShrink = rng.nextChoice([0, 1] as const);
+      }
+    }
+  } else if (tier === 27) {
+    // Text-driven grid items: auto rows sized by wrapped text at the resolved
+    // column width; fit-content vs stretched columns.
+    const cat = tier27Config.category;
+    if (depth > 0) {
+      node.display = "grid";
+      node.width = rng.nextRange(240, 620);
+      if (rng.next() < 0.4) node.height = rng.nextRange(160, 460);
+      const colTrack = (): TrackListEntry => {
+        const r = rng.next();
+        if (cat === 2) {
+          // Emphasize fr / minmax columns.
+          if (r < 0.5) return "1fr";
+          if (r < 0.8) return { min: rng.nextRange(40, 90), max: "1fr" };
+          return rng.nextRange(70, 160);
+        }
+        if (r < 0.45) return rng.nextRange(70, 170);
+        if (r < 0.7) return "auto";
+        if (r < 0.85) return "1fr";
+        return { min: rng.nextRange(40, 90), max: rng.nextRange(120, 200) };
+      };
+      const rowTrack = (): TrackListEntry => {
+        // Bias rows toward auto so wrapped-text height drives them.
+        const r = rng.next();
+        if (r < 0.7) return "auto";
+        if (r < 0.85) return rng.nextRange(30, 70);
+        return "min-content";
+      };
+      node.gridTemplateColumns = Array.from(
+        { length: rng.nextRange(2, 3) },
+        colTrack,
+      );
+      node.gridTemplateRows = Array.from(
+        { length: rng.nextRange(1, 3) },
+        rowTrack,
+      );
+      if (rng.next() < 0.7) node.gap = genGap(rng);
+      if (rng.next() < 0.6) {
+        node.justifyItems = rng.nextChoice([
+          "start",
+          "center",
+          "stretch",
+        ] as const);
+      }
+      if (rng.next() < 0.3) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "center",
+          "stretch",
+        ] as const);
+      }
+    } else {
+      isLeaf = true;
+      if (rng.next() < 0.8) {
+        (node as any)._text = genTextString(rng, 2, 12);
+      } else {
+        node.width = rng.nextRange(40, 130);
+        node.height = rng.nextRange(24, 90);
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1708,6 +1840,10 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                       ? rng.nextRange(2, 8)
                     : tier === 25
                       ? rng.nextRange(3, 6)
+                    : tier === 26
+                      ? rng.nextRange(2, 6)
+                    : tier === 27
+                      ? rng.nextRange(2, 6)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -1809,10 +1945,24 @@ function toHTML(node: LayoutNode): string {
   if (node.bottom !== undefined) styles.push(`bottom: ${node.bottom}px`);
   if (node.left !== undefined) styles.push(`left: ${node.left}px`);
 
+  if ((node as any)._text !== undefined) {
+    styles.push(
+      `font: ${TEXT_FONT}`,
+      `line-height: ${TEXT_LINE_HEIGHT}px`,
+      `overflow-wrap: normal`,
+      `word-break: normal`,
+      `white-space: normal`,
+      `hyphens: none`,
+    );
+  }
+
   let childrenHtml = node.children.map(toHTML).join("\n");
   // For content items, inject a fixed-size span as intrinsic content
   if ((node as any)._contentWidth !== undefined) {
     childrenHtml += `<span style="display:block; width:${(node as any)._contentWidth}px; height:${(node as any)._contentHeight}px;"></span>`;
+  }
+  if ((node as any)._text !== undefined) {
+    childrenHtml += (node as any)._text;
   }
   return `<div id="${node.id}" style="${styles.join("; ")}">${childrenHtml}</div>`;
 }
@@ -1871,6 +2021,12 @@ async function generateFixtures(
     if (tier === 24) {
       tier24Config.category = i % 4;
     }
+    if (tier === 26) {
+      tier26Config.category = i % 4;
+    }
+    if (tier === 27) {
+      tier27Config.category = i % 3;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -1891,7 +2047,11 @@ async function generateFixtures(
                 : 1
             : tier === 17
               ? 3
-            : (tier >= 18 && tier <= 22) || tier === 24 || tier === 25
+            : (tier >= 18 && tier <= 22) ||
+                tier === 24 ||
+                tier === 25 ||
+                tier === 26 ||
+                tier === 27
               ? 1
             : tier === 23
               ? 2
@@ -2024,6 +2184,40 @@ async function generateFixtures(
       return boxes;
     });
 
+    // Capture per-word advance widths for text items directly from Chromium,
+    // so the runner's line breaker is a pure function of measured data.
+    const textItemList: { id: string; text: string }[] = [];
+    function collectTextItems(n: any) {
+      if (n._text !== undefined) textItemList.push({ id: n.id, text: n._text });
+      if (n.children) for (const child of n.children) collectTextItems(child);
+    }
+    collectTextItems(tree);
+
+    let textMeasurements: Record<
+      string,
+      { wordWidths: number[]; spaceWidth: number; lineHeight: number }
+    > = {};
+    if (textItemList.length > 0) {
+      textMeasurements = await page.evaluate((items, font) => {
+        const cv = document.createElement("canvas");
+        const ctx = cv.getContext("2d")!;
+        ctx.font = font;
+        const spaceWidth =
+          ctx.measureText("x x").width - ctx.measureText("xx").width;
+        const out: Record<string, any> = {};
+        for (const { id, text } of items) {
+          const el = document.getElementById(id)!;
+          const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
+          out[id] = {
+            wordWidths: text.split(" ").map((w) => ctx.measureText(w).width),
+            spaceWidth,
+            lineHeight,
+          };
+        }
+        return out;
+      }, textItemList, TEXT_FONT);
+    }
+
     // Extract contentMeasurements and strip internal fields from the tree
     const contentMeasurements: Record<
       string,
@@ -2038,6 +2232,7 @@ async function generateFixtures(
         delete n._contentWidth;
         delete n._contentHeight;
       }
+      if (n._text !== undefined) delete n._text;
       if (n.children) {
         for (const child of n.children) extractContentMeasurements(child);
       }
@@ -2056,6 +2251,9 @@ async function generateFixtures(
 
     if (Object.keys(contentMeasurements).length > 0) {
       fixture.contentMeasurements = contentMeasurements;
+    }
+    if (Object.keys(textMeasurements).length > 0) {
+      fixture.textMeasurements = textMeasurements;
     }
 
     const filePath = path.join(fixturesDir, `tier-${tier}-${seed}.json`);

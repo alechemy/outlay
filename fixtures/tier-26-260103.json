@@ -1,0 +1,206 @@
+{
+  "tier": 26,
+  "seed": 260103,
+  "description": "Tier 26 randomly generated fixture (seed 260103)",
+  "input": {
+    "id": "root-node",
+    "padding": {
+      "top": 13,
+      "right": 6,
+      "bottom": 0,
+      "left": 7
+    },
+    "margin": {
+      "top": 1,
+      "right": 6,
+      "bottom": 11,
+      "left": 2
+    },
+    "border": {
+      "top": 4,
+      "right": 8,
+      "bottom": 10,
+      "left": 7
+    },
+    "boxSizing": "content-box",
+    "display": "flex",
+    "children": [
+      {
+        "id": "node-2",
+        "padding": {
+          "top": 1,
+          "right": 3,
+          "bottom": 2,
+          "left": 1
+        },
+        "margin": {
+          "top": 10,
+          "right": 5,
+          "bottom": 18,
+          "left": 3
+        },
+        "border": {
+          "top": 8,
+          "right": 10,
+          "bottom": 6,
+          "left": 2
+        },
+        "boxSizing": "border-box",
+        "display": "block",
+        "children": [],
+        "flexGrow": 2,
+        "flexShrink": 1,
+        "minWidth": 27,
+        "maxWidth": 178
+      },
+      {
+        "id": "node-3",
+        "padding": {
+          "top": 4,
+          "right": 7,
+          "bottom": 11,
+          "left": 10
+        },
+        "margin": {
+          "top": 8,
+          "right": 3,
+          "bottom": 8,
+          "left": 17
+        },
+        "border": {
+          "top": 7,
+          "right": 3,
+          "bottom": 1,
+          "left": 5
+        },
+        "boxSizing": "border-box",
+        "display": "block",
+        "children": [],
+        "flexGrow": 1,
+        "flexShrink": 1,
+        "flexBasis": 109
+      }
+    ],
+    "flexWrap": "nowrap",
+    "flexDirection": "row",
+    "width": 447,
+    "height": 282
+  },
+  "expected": {
+    "root-node": {
+      "id": "root-node",
+      "x": -14,
+      "y": -17,
+      "width": 447,
+      "height": 282,
+      "padding": {
+        "top": 13,
+        "right": 6,
+        "bottom": 0,
+        "left": 7
+      },
+      "border": {
+        "top": 4,
+        "right": 8,
+        "bottom": 10,
+        "left": 7
+      },
+      "margin": {
+        "top": 1,
+        "right": 6,
+        "bottom": 11,
+        "left": 2
+      },
+      "borderBoxWidth": 475,
+      "borderBoxHeight": 309,
+      "outerWidth": 483,
+      "outerHeight": 321
+    },
+    "node-2": {
+      "id": "node-2",
+      "x": 3,
+      "y": 10,
+      "width": 162,
+      "height": 237,
+      "padding": {
+        "top": 1,
+        "right": 3,
+        "bottom": 2,
+        "left": 1
+      },
+      "border": {
+        "top": 8,
+        "right": 10,
+        "bottom": 6,
+        "left": 2
+      },
+      "margin": {
+        "top": 10,
+        "right": 5,
+        "bottom": 18,
+        "left": 3
+      },
+      "borderBoxWidth": 178,
+      "borderBoxHeight": 254,
+      "outerWidth": 186,
+      "outerHeight": 282
+    },
+    "node-3": {
+      "id": "node-3",
+      "x": 203,
+      "y": 8,
+      "width": 216,
+      "height": 243,
+      "padding": {
+        "top": 4,
+        "right": 7,
+        "bottom": 11,
+        "left": 10
+      },
+      "border": {
+        "top": 7,
+        "right": 3,
+        "bottom": 1,
+        "left": 5
+      },
+      "margin": {
+        "top": 8,
+        "right": 3,
+        "bottom": 8,
+        "left": 17
+      },
+      "borderBoxWidth": 241,
+      "borderBoxHeight": 266,
+      "outerWidth": 261,
+      "outerHeight": 282
+    }
+  },
+  "chromiumVersion": "Chrome/146.0.7680.153",
+  "tolerance": 0.5,
+  "textMeasurements": {
+    "node-2": {
+      "wordWidths": [
+        34.6796875,
+        22.2421875,
+        26.6796875,
+        69.3671875,
+        26.6953125,
+        79.1640625,
+        8.8984375,
+        62.25,
+        72.9296875,
+        46.25
+      ],
+      "spaceWidth": 4.4453125,
+      "lineHeight": 20
+    },
+    "node-3": {
+      "wordWidths": [
+        77.375,
+        69.375
+      ],
+      "spaceWidth": 4.4453125,
+      "lineHeight": 20
+    }
+  }
+}
