@@ -47,6 +47,7 @@ let tier24Config = { category: 0 };
 let tier26Config = { category: 0 };
 let tier27Config = { category: 0 };
 let tier28Config = { category: 0 };
+let tier29Config = { category: 0 };
 
 const TEXT_FONT = "16px Arial";
 const TEXT_LINE_HEIGHT = 20;
@@ -1735,6 +1736,69 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
       if (rng.next() < 0.4) node.width = rng.nextRange(30, 110);
       if (rng.next() < 0.4) node.height = rng.nextRange(20, 60);
     }
+  } else if (tier === 29) {
+    const cat = tier29Config.category;
+    if (depth === 2) {
+      if (cat === 0) {
+        node.display = "grid";
+        node.width = rng.nextRange(320, 760);
+        if (rng.next() < 0.4) node.height = rng.nextRange(240, 520);
+        node.gridTemplateColumns = Array.from(
+          { length: rng.nextRange(2, 3) },
+          (): TrackListEntry => {
+            const r = rng.next();
+            if (r < 0.4) return rng.nextRange(120, 240);
+            if (r < 0.75) return "auto";
+            return "1fr";
+          },
+        );
+        node.gridTemplateRows = Array.from(
+          { length: rng.nextRange(1, 2) },
+          (): TrackListEntry => (rng.next() < 0.8 ? "auto" : rng.nextRange(60, 140)),
+        );
+        if (rng.next() < 0.7) node.gap = genGap(rng);
+      } else {
+        node.display = "flex";
+        node.flexDirection = "column";
+        node.width = rng.nextRange(320, 760);
+        node.height = rng.nextRange(240, 560);
+        if (rng.next() < 0.4) {
+          node.alignItems = rng.nextChoice([
+            "stretch",
+            "flex-start",
+            "center",
+          ] as const);
+        }
+        if (rng.next() < 0.5) node.gap = genGap(rng);
+      }
+    } else if (depth === 1) {
+      if (cat === 1) {
+        node.display = "grid";
+        node.gridTemplateColumns = Array.from(
+          { length: rng.nextRange(1, 2) },
+          (): TrackListEntry => (rng.next() < 0.5 ? "auto" : "1fr"),
+        );
+        node.gridTemplateRows = [
+          rng.next() < 0.8 ? "auto" : rng.nextRange(50, 120),
+        ] as TrackListEntry[];
+        if (rng.next() < 0.5) node.gap = genGap(rng);
+        if (rng.next() < 0.3) node.width = rng.nextRange(140, 300);
+      } else {
+        node.display = "flex";
+        node.flexDirection = rng.next() < 0.6 ? "column" : "row";
+        if (rng.next() < 0.3) node.width = rng.nextRange(140, 300);
+        if (rng.next() < 0.2) node.height = rng.nextRange(80, 200);
+        if (rng.next() < 0.5) node.gap = genGap(rng);
+      }
+    } else {
+      isLeaf = true;
+      if (rng.next() < 0.85) {
+        (node as any)._text = genTextString(rng, 3, 14);
+      } else {
+        node.width = rng.nextRange(40, 120);
+        node.height = rng.nextRange(20, 60);
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1886,6 +1950,10 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                       ? depth === 2
                         ? rng.nextRange(1, 3)
                         : rng.nextRange(3, 8)
+                    : tier === 29
+                      ? depth === 2
+                        ? rng.nextRange(2, 3)
+                        : rng.nextRange(1, 3)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -2072,6 +2140,9 @@ async function generateFixtures(
     if (tier === 28) {
       tier28Config.category = i % 3;
     }
+    if (tier === 29) {
+      tier29Config.category = i % 3;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -2098,7 +2169,7 @@ async function generateFixtures(
                 tier === 26 ||
                 tier === 27
               ? 1
-            : tier === 23 || tier === 28
+            : tier === 23 || tier === 28 || tier === 29
               ? 2
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||

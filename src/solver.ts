@@ -11,6 +11,7 @@ import {
     ResolvedBox,
     ResolvedBoxModel,
     SolverOptions,
+    TrackListEntry,
 } from "./types.js";
 import {
     GridLayoutInfo,
@@ -317,16 +318,8 @@ function gridIntrinsicSize(
   nodeMap: Map<string, NormalizedLayoutNode>,
   boxModelMap: Map<string, ResolvedBoxModel>,
   mode: "min-content" | "max-content",
-  inlineSize?: number,
 ): number {
-  const colTracks =
-    dimension === "height" && inlineSize !== undefined
-      ? expandAutoRepeat(
-          node.gridTemplateColumns,
-          inlineSize,
-          resolveGaps(node, true).main,
-        ).tracks
-      : expandTrackList(node.gridTemplateColumns);
+  const colTracks = expandTrackList(node.gridTemplateColumns);
   const rowTracks = expandTrackList(node.gridTemplateRows);
   const gridItems = node.children.filter((child) => {
     const pos = child.position ?? "static";
@@ -402,6 +395,64 @@ function gridIntrinsicSize(
  * Compute the intrinsic content-box size of a flex container in a given dimension.
  * mode: "min-content" uses flex-base-size; "max-content" uses max(flex-base, item max-content) for growable items.
  */
+function hasAutoRepeat(entries?: TrackListEntry[]): boolean {
+  return (
+    entries?.some(
+      (e) =>
+        typeof e === "object" &&
+        e !== null &&
+        "repeat" in e &&
+        typeof e.repeat === "string",
+    ) ?? false
+  );
+}
+
+function subtreeHasWidthDependentContent(node: NormalizedLayoutNode): boolean {
+  if (node.measureContent) {
+    const min = node.measureContent(0);
+    const max = node.measureContent(Infinity);
+    if (min.height !== max.height || min.width !== max.width) return true;
+  }
+  if (
+    node.display === "grid" &&
+    (hasAutoRepeat(node.gridTemplateColumns) ||
+      hasAutoRepeat(node.gridTemplateRows))
+  ) {
+    return true;
+  }
+  for (const child of node.children) {
+    if (subtreeHasWidthDependentContent(child)) return true;
+  }
+  return false;
+}
+
+/**
+ * Block-axis intrinsic size at a known inline size, computed by actually
+ * laying the subtree out at that width (Pretext pattern 1) — the only way
+ * width-dependent descendants (wrapping text, auto-repeat tracks) resolve
+ * the way real layout will. Constant-content subtrees keep the plain
+ * intrinsic path, whose heights don't depend on the inline size.
+ */
+function containerHeightAtWidth(
+  node: NormalizedLayoutNode,
+  inlineContentSize: number,
+): number {
+  const widthValue =
+    node.boxSizing === "border-box"
+      ? inlineContentSize +
+        node.padding.left +
+        node.padding.right +
+        node.border.left +
+        node.border.right
+      : inlineContentSize;
+  const result = solveLayout({
+    ...node,
+    width: widthValue,
+    height: undefined,
+  } as LayoutNode);
+  return result.boxes.get(node.id)!.height;
+}
+
 function computeIntrinsicContentSize(
   node: NormalizedLayoutNode,
   dimension: "width" | "height",
@@ -410,15 +461,17 @@ function computeIntrinsicContentSize(
   mode: "min-content" | "max-content" = "min-content",
   inlineSize?: number,
 ): number {
+  if (
+    dimension === "height" &&
+    inlineSize !== undefined &&
+    (node.display === "flex" || node.display === "grid") &&
+    node.children.length > 0 &&
+    subtreeHasWidthDependentContent(node)
+  ) {
+    return containerHeightAtWidth(node, inlineSize);
+  }
   if (node.display === "grid" && node.children.length > 0) {
-    return gridIntrinsicSize(
-      node,
-      dimension,
-      nodeMap,
-      boxModelMap,
-      mode,
-      inlineSize,
-    );
+    return gridIntrinsicSize(node, dimension, nodeMap, boxModelMap, mode);
   }
   if (node.display !== "flex" || node.children.length === 0) {
     if (node.measureContent) {
@@ -809,7 +862,7 @@ export function solveLayout(
             nodeMap,
             boxModelMap,
             "min-content",
-            !isRow && child.display === "grid"
+            !isRow && (child.display === "grid" || child.display === "flex")
               ? usedInlineSize(
                   node,
                   boxModelMap.get(node.id)!,
@@ -1002,7 +1055,7 @@ export function solveLayout(
               nodeMap,
               boxModelMap,
               mainDimProp === "width" ? "max-content" : "min-content",
-              !isRow && child.display === "grid"
+              !isRow && (child.display === "grid" || child.display === "flex")
                 ? usedInlineSize(
                     node,
                     boxModelMap.get(node.id)!,
@@ -1091,7 +1144,7 @@ export function solveLayout(
                       nodeMap,
                       boxModelMap,
                       "min-content",
-                      !isRow && child.display === "grid"
+                      !isRow && (child.display === "grid" || child.display === "flex")
                         ? usedInlineSize(
                             node,
                             boxModelMap.get(node.id)!,
@@ -1316,29 +1369,9 @@ export function solveLayout(
               child.flexDirection === undefined;
             const childResolved = parentResolvedDims.get(childId);
 
-            // Set intrinsic cross-size (if not already resolved by parent)
-            const crossDim: "width" | "height" = childIsRow
-              ? "height"
-              : "width";
-            if (
-              typeof child[crossDim] !== "number" &&
-              !childResolved?.has(crossDim)
-            ) {
-              const intrinsicCross = computeIntrinsicContentSize(
-                child,
-                crossDim,
-                nodeMap,
-                boxModelMap,
-              );
-              const childModel = boxModelMap.get(childId)!;
-              if (childIsRow) {
-                childModel.contentHeight = intrinsicCross;
-              } else {
-                childModel.contentWidth = intrinsicCross;
-              }
-            }
-
-            // Set intrinsic main-size if needed and not resolved by parent
+            // Set intrinsic main-size if needed and not resolved by parent.
+            // Width mains size like any inline cross axis: fit-content or
+            // stretch against the container, not raw max-content.
             const mainDim: "width" | "height" = childIsRow ? "width" : "height";
             if (
               typeof child[mainDim] !== "number" &&
@@ -1349,13 +1382,36 @@ export function solveLayout(
                 ? childModel.contentWidth
                 : childModel.contentHeight;
               if (currentMain === 0) {
-                const intrinsicMain = computeIntrinsicContentSize(
-                  child,
-                  mainDim,
-                  nodeMap,
-                  boxModelMap,
-                  mainDim === "width" ? "max-content" : "min-content",
-                );
+                let intrinsicMain: number | undefined;
+                if (mainDim === "width") {
+                  intrinsicMain = usedInlineSize(
+                    node,
+                    boxModelMap.get(node.id)!,
+                    typeof node.width === "number" ||
+                      (parentResolvedDims.get(node.id)?.has("width") ?? false),
+                    child,
+                    childModel,
+                    nodeMap,
+                    boxModelMap,
+                  );
+                  if (intrinsicMain === undefined) {
+                    intrinsicMain = computeIntrinsicContentSize(
+                      child,
+                      "width",
+                      nodeMap,
+                      boxModelMap,
+                      "max-content",
+                    );
+                  }
+                } else {
+                  intrinsicMain = computeIntrinsicContentSize(
+                    child,
+                    "height",
+                    nodeMap,
+                    boxModelMap,
+                    "min-content",
+                  );
+                }
                 if (childIsRow) {
                   childModel.contentWidth = intrinsicMain;
                 } else {
@@ -1365,6 +1421,66 @@ export function solveLayout(
                 if (!parentResolvedDims.has(childId))
                   parentResolvedDims.set(childId, new Set());
                 parentResolvedDims.get(childId)!.add(mainDim);
+              }
+            }
+
+            // Cross-size after main, so row children measure height at width
+            const crossDim: "width" | "height" = childIsRow
+              ? "height"
+              : "width";
+            if (
+              typeof child[crossDim] !== "number" &&
+              !childResolved?.has(crossDim)
+            ) {
+              const childModel = boxModelMap.get(childId)!;
+              const alignVal =
+                (child.alignSelf && child.alignSelf !== "auto"
+                  ? child.alignSelf
+                  : node.alignItems) ?? "stretch";
+              const nonStretch =
+                alignVal !== "stretch" ||
+                child.margin.left === "auto" ||
+                child.margin.right === "auto";
+              let intrinsicCross: number | undefined;
+              if (crossDim === "width" && nonStretch) {
+                // Stretch children take their width from the line cross in
+                // Phase 6; only non-stretched ones size to fit-content here.
+                intrinsicCross = usedInlineSize(
+                  node,
+                  boxModelMap.get(node.id)!,
+                  typeof node.width === "number" ||
+                    (parentResolvedDims.get(node.id)?.has("width") ?? false),
+                  child,
+                  childModel,
+                  nodeMap,
+                  boxModelMap,
+                );
+                if (intrinsicCross !== undefined) {
+                  if (!parentResolvedDims.has(childId))
+                    parentResolvedDims.set(childId, new Set());
+                  parentResolvedDims.get(childId)!.add("width");
+                }
+              }
+              if (intrinsicCross === undefined) {
+                const inline =
+                  crossDim === "height" &&
+                  (typeof child.width === "number" ||
+                    parentResolvedDims.get(childId)?.has("width"))
+                    ? childModel.contentWidth
+                    : undefined;
+                intrinsicCross = computeIntrinsicContentSize(
+                  child,
+                  crossDim,
+                  nodeMap,
+                  boxModelMap,
+                  "min-content",
+                  inline,
+                );
+              }
+              if (childIsRow) {
+                childModel.contentHeight = intrinsicCross;
+              } else {
+                childModel.contentWidth = intrinsicCross;
               }
             }
           } else if (child.display === "grid") {
@@ -1898,6 +2014,15 @@ export function solveLayout(
           minH = maxH = cm.contentHeight;
         } else if (child.measureContent && child.children.length === 0) {
           minH = maxH = child.measureContent(cm.contentWidth).height;
+        } else if (child.children.length > 0) {
+          minH = maxH = computeIntrinsicContentSize(
+            child,
+            "height",
+            nodeMap,
+            boxModelMap,
+            "min-content",
+            cm.contentWidth,
+          );
         } else {
           minH = computeIntrinsicContentSize(
             child,
