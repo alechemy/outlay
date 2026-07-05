@@ -298,6 +298,10 @@ Tests are organized into numbered tiers of increasing difficulty. All unlocked t
 
 **Tier 15: Baseline alignment** — `align-items`/`align-self: baseline`: synthesized baselines for empty boxes, per-line baseline groups under wrap/wrap-reverse, nested-container baselines, mixed `alignSelf`, column-direction fallback. ~100 fixtures.
 
+**Tier 16: Keyword sizing** — `min-content`/`max-content` on container heights (both axes) and on flex items (widths and heights), mixed with grow/shrink and gap; also exercises literal `"auto"` widths/heights/flex-basis. ~100 fixtures.
+
+**Tier 17: Block containers in flex trees** — `display: block` containers with block/flex children nested as flex items, exercising the block layout path in a non-root position. Definite-size, zero-vertical-margin boxes isolate it from margin collapse (a non-goal). ~75 fixtures.
+
 ---
 
 ## Prior Art

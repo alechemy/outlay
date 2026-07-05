@@ -165,7 +165,8 @@ const textNode = {
 - `min-width` / `max-width` / `min-height` / `max-height` on both axes
 - Multi-line wrapping (`wrap`, `wrap-reverse`)
 - Nested flex containers with indefinite size resolution
-- `min-content` / `max-content` intrinsic sizing
+- `min-content` / `max-content` intrinsic sizing on container widths/heights and on flex items
+- `display: block` containers with children, nested anywhere in a flex tree
 - `position: absolute` and `position: fixed`
 - `margin: auto` centering (both axes)
 - `display: none`
@@ -179,10 +180,11 @@ const textNode = {
 - No inline layout or line breaking (use Pretext for text)
 - No floats, no table layout
 - No CSS Grid (yet)
+- No block-flow margin collapsing, and no auto-height for `display: block` containers (give block containers a definite height)
 
 ## Accuracy
 
-1725 fixtures across 15 tiers, all passing at 100%. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
+1900 fixtures across 17 tiers, all passing at 100%. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
 
 ## Performance
 

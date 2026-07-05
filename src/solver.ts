@@ -774,13 +774,18 @@ export function solveLayout(
                   ? Math.max(0, child.minWidth - paddingBorder)
                   : child.minWidth;
             } else if (child.display === "flex") {
-              const contentMin = computeIntrinsicContentSize(
-                child,
-                "width",
-                nodeMap,
-                boxModelMap,
-                "min-content",
-              );
+              // An empty flex item has no content, so its min-content is 0
+              // (min-width:auto lets it shrink to nothing).
+              const contentMin =
+                collectFlexItems(child).length === 0
+                  ? 0
+                  : computeIntrinsicContentSize(
+                      child,
+                      "width",
+                      nodeMap,
+                      boxModelMap,
+                      "min-content",
+                    );
               if (typeof child.width === "number") {
                 const specifiedContent =
                   child.boxSizing === "border-box"
@@ -807,13 +812,16 @@ export function solveLayout(
                   ? Math.max(0, child.minHeight - paddingBorder)
                   : child.minHeight;
             } else if (child.display === "flex") {
-              const contentMin = computeIntrinsicContentSize(
-                child,
-                "height",
-                nodeMap,
-                boxModelMap,
-                "min-content",
-              );
+              const contentMin =
+                collectFlexItems(child).length === 0
+                  ? 0
+                  : computeIntrinsicContentSize(
+                      child,
+                      "height",
+                      nodeMap,
+                      boxModelMap,
+                      "min-content",
+                    );
               if (typeof child.height === "number") {
                 const specifiedContent =
                   child.boxSizing === "border-box"

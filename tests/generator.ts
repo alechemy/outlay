@@ -1024,6 +1024,60 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
       }
     }
     maybeLiteralAuto(node, rng, depth);
+  } else if (tier === 17) {
+    // Tier 17: block containers with children nested inside flex trees.
+    // Every box is definite-size with zero vertical margins, isolating the
+    // block layout path from margin collapse (a documented non-goal).
+    const cat = tier17Config.category;
+    node.margin.top = 0;
+    node.margin.bottom = 0;
+    if (depth === 3) {
+      node.display = "flex";
+      node.flexDirection = rng.nextChoice(["row", "column"] as const);
+      node.flexWrap = "nowrap";
+      node.width = rng.nextRange(400, 800);
+      node.height = rng.nextRange(300, 600);
+      if (rng.next() < 0.4) {
+        node.alignItems = rng.nextChoice([
+          "flex-start",
+          "flex-end",
+          "center",
+          "stretch",
+        ] as const);
+      }
+      if (rng.next() < 0.3) {
+        node.justifyContent = rng.nextChoice([
+          "flex-start",
+          "center",
+          "space-between",
+        ] as const);
+      }
+    } else if (depth === 2) {
+      const isBlock =
+        cat === 0 ? true : cat === 1 ? rng.next() < 0.7 : rng.next() < 0.5;
+      node.display = isBlock ? "block" : "flex";
+      if (!isBlock) node.flexDirection = rng.nextChoice(["row", "column"] as const);
+      node.width = rng.nextRange(120, 260);
+      node.height = rng.nextRange(120, 260);
+      node.flexGrow = rng.nextChoice([0, 0, 1] as const);
+      // Containers keep their definite size (shrinking a block box below its
+      // definite width needs block intrinsic sizing — a documented non-goal).
+      node.flexShrink = 0;
+    } else if (depth === 1) {
+      const isBlock = rng.next() < 0.6;
+      node.display = isBlock ? "block" : "flex";
+      if (!isBlock) node.flexDirection = rng.nextChoice(["row", "column"] as const);
+      node.width = rng.nextRange(50, 150);
+      node.height = rng.nextRange(40, 120);
+      node.flexGrow = rng.nextChoice([0, 1] as const);
+      node.flexShrink = 0;
+    } else {
+      node.display = rng.next() < 0.5 ? "block" : "flex";
+      node.width = rng.nextRange(20, 90);
+      node.height = rng.nextRange(20, 80);
+      node.flexGrow = rng.nextChoice([0, 1] as const);
+      node.flexShrink = rng.nextChoice([0, 1] as const);
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1282,7 +1336,7 @@ async function generateFixtures(
                 ? 2
                 : 1
             : tier === 17
-              ? 2
+              ? 3
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||
                 tier === 9 ||

@@ -2,9 +2,9 @@
 
 ## Current Status
 
-As of 2026-07-01:
+As of 2026-07-05:
 
-- **Solver**: Tiers 1–15 fully passing (100%, 1725/1725). Tier 13 covers `gap` (implemented 2026-07-01, including line breaking, free-space math, and inter-line spacing); Tier 14 locks `minHeight`/`maxHeight` on both axes; Tier 15 locks `align-items`/`align-self: baseline` (row and column direction, wrap and wrap-reverse per-line groups, nested-container baselines, mixed `alignSelf`). **The pass rate only covers properties the generator emits** — see Known gaps below before trusting a "complete" claim.
+- **Solver**: Tiers 1–17 fully passing (100%, 1900/1900). Tier 13 covers `gap`; Tier 14 locks `minHeight`/`maxHeight` on both axes; Tier 15 locks `align-items`/`align-self: baseline` (row and column direction, wrap and wrap-reverse per-line groups, nested-container baselines, mixed `alignSelf`); Tier 16 locks `min-content`/`max-content` on container heights and on flex items (resolved to concrete intrinsic sizes via `resolveKeywordSizes` before layout); Tier 17 locks `display: block` containers with children nested as flex items (the block layout path in a non-root position). **The pass rate only covers properties the generator emits** — see Known gaps below before trusting a "complete" claim.
 - **Packaging**: v1 build, smoke test, and README exist, but the package is **not published to npm** (naming is an open question in PROJECT.md). The README's install instructions describe the post-publish state.
 - **Demos**: only the Layout Explorer is built (`pages/demos/explorer.html`, verified working). `DEMOS_PROMPT.md` specifies the remaining five demos.
 - **Phase 3 (CSS Grid)**: unstarted. `src/types.ts` declares grid properties, but the solver and the fixture generator have no grid support.
@@ -17,13 +17,18 @@ Performance targets are all met:
 
 Run `npm run bench` to check performance. All other infrastructure (fixture runner, generator, regression lock, probe) is built.
 
-### Known gaps (verified 2026-07-05, post baseline work)
+### Known gaps and non-goals (verified 2026-07-05, post keyword-sizing / block-in-flex work)
 
-- **`height: "min-content"` / `height: "max-content"` have zero fixture coverage.** The generator only emits keyword sizes for tier-8 container *widths* (~17 fixtures); keyword heights and keyword sizes on flex items are never generated, so the solver's behavior there is unlocked.
-- **Literal `"auto"` strings for `width`/`height`/`flexBasis` are never generated.** The solver treats any non-number as auto, so omission covers the same code path; this is a vocabulary-completeness note, not a correctness risk.
-- **Block containers with children are only covered as roots (Tier 1).** A `display: block` node with children nested inside a flex tree is never generated; the solver's block path (no margin collapse) is unlocked in that position.
+Documented **non-goals** (deliberately not implemented; the generator avoids them, so no fixture asserts them):
 
-Baseline (Tier 15) note: nested flex containers used as baseline items derive their first baseline from their first in-flow item recursively; the generated fixtures keep those nested containers at cross-start alignment (default/stretch) with definite-height children, which is where `computeBaselineOffset` is exact. Baseline items whose first descendant is centered/flex-end-aligned inside the nested container are not generated.
+- **Block margin collapse.** Inside a flex item's block subtree Chromium collapses adjacent sibling vertical margins (parent/child collapse is suppressed because a flex item is a BFC root). The solver sums margins instead. Tier 17 sidesteps this by giving every block-flow box zero vertical margins.
+- **Block auto-height.** The solver never sizes a `display: block` container to fit its children; a block container with `height: auto` resolves to content-height 0. Block containers must carry a definite height (Tier 1 and Tier 17 both do).
+- **Block-container intrinsic min-content.** A `display: block` flex item that must *shrink* below its definite size needs its content's min-content (transferred from its block children); the solver has no block intrinsic sizing, so Tier 17 keeps block containers non-shrinking (`flexShrink: 0`). Empty flex items and block *leaves* shrink correctly (min-content 0).
+- **`flexBasis: "content"` with a definite main size.** The solver treats any non-number `flexBasis` as `auto` (uses the main-size property), whereas `content` ignores the specified size. Only ever generated on content-less/definite-size-less items (Tier 8), where the two coincide.
+
+Remaining coverage note:
+
+- **Baseline nested containers** derive their first baseline from their first in-flow item recursively; Tier 15 keeps those nested containers at cross-start alignment (default/stretch) with definite-height children, which is where `computeBaselineOffset` is exact. Baseline items whose first descendant is centered/flex-end-aligned inside the nested container are not generated.
 
 The general lesson: the fitness metric's coverage boundary is the generator's property vocabulary. When adding any property to `types.ts` or the README, add it to the generator first so fixtures can falsify the implementation. Tier 14 proved the point: locking `minHeight`/`maxHeight` immediately exposed three real solver bugs (cross-axis min/max clamping missing entirely, line cross sizes computed from unclamped values, and hypothetical main sizes unclamped during line breaking).
 
