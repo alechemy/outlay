@@ -197,10 +197,11 @@ async function main() {
     await selectTreeNode(page, "node-2");
     await setSizeFixed(page, "height", 120);
     await selectTreeNode(page, "node-1");
-    for (const ai of ["flex-start", "flex-end", "center", "stretch"]) {
+    for (const ai of ["flex-start", "flex-end", "center", "stretch", "baseline"]) {
       await setSelect(page, "alignItems", ai);
       await check(`alignItems: ${ai}`);
     }
+    await setSelect(page, "alignItems", "stretch");
 
     console.log("Scenario: padding and gap sweeps on root");
     for (const pad of [0, 5, 18, 40]) {

@@ -296,6 +296,8 @@ Tests are organized into numbered tiers of increasing difficulty. All unlocked t
 
 **Tier 14: Min/max height constraints** — `minHeight`/`maxHeight` as main-axis constraints (column direction) and cross-axis constraints (row direction). ~100 fixtures.
 
+**Tier 15: Baseline alignment** — `align-items`/`align-self: baseline`: synthesized baselines for empty boxes, per-line baseline groups under wrap/wrap-reverse, nested-container baselines, mixed `alignSelf`, column-direction fallback. ~100 fixtures.
+
 ---
 
 ## Prior Art
@@ -389,7 +391,7 @@ A script that runs `npm pack`, installs the tarball into a temp directory, impor
 - [ ] CSS Grid track sizing algorithm (explicit grid)
 - [ ] Grid item placement (explicit and auto-placement)
 - [ ] Mixed flex + grid trees
-- [ ] New tiers 15-20 covering grid-specific test cases (13-14 were taken by gap and min/max-height coverage)
+- [ ] New tiers 18+ covering grid-specific test cases (13-17 were taken by gap, min/max-height, baseline, keyword sizing, and block-in-flex coverage)
 - [ ] Fitness metric extended to cover grid tiers
 
 ---
@@ -406,8 +408,8 @@ A script that runs `npm pack`, installs the tarball into a temp directory, impor
 
 4. **Sub-pixel rounding strategy.** Resolved empirically. The 0.5px tolerance absorbs sub-pixel rounding differences. No Chromium-specific rounding replication was needed.
 
+5. **Baseline alignment feasibility.** Resolved (Tier 15, 2026-07-05). Implemented directly against Chromium probe findings: empty boxes synthesize their baseline at the bottom border edge (row) or cross-start border edge (column); flex-container items derive their first baseline recursively from their first in-flow item. No `measureContent` baseline extension was needed — the solver's own resolved box models supply the offsets.
+
 ### Open
 
-1. **Baseline alignment feasibility.** `align-items: baseline` requires knowing the first baseline offset of each flex item's content. Investigate whether extending `measureContent` to return a `baseline` offset is sufficient. If complexity is high relative to usage frequency, defer to a post-v1 phase.
-
-2. **Package naming.** Decide on the npm package name before first publish. Current `package.json` says `constraint-layout-algo` — evaluate whether a scoped name or shorter name is preferable.
+1. **Package naming.** Decide on the npm package name before first publish. Current `package.json` says `constraint-layout-algo` — evaluate whether a scoped name or shorter name is preferable.

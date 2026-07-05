@@ -462,6 +462,7 @@ export function solveLayout(
     crossSize: number;
     crossOffset: number;
     baselineAscent?: number;
+    baselineDescent?: number;
   }
   const containerLineLayouts = new Map<string, LineLayout[]>();
   const parentResolvedDims = new Map<string, Set<"width" | "height">>();
@@ -1119,6 +1120,7 @@ export function solveLayout(
             : maxOuterCross,
           crossOffset: 0,
           baselineAscent: hasBaseline ? maxAscent : undefined,
+          baselineDescent: hasBaseline ? maxDescent : undefined,
         });
       }
 
@@ -1693,7 +1695,13 @@ export function solveLayout(
                   const baselineOffset = isRow
                     ? computeBaselineOffset(child)
                     : 0;
-                  itemCrossOffset = lineLayout.baselineAscent - baselineOffset;
+                  // wrap-reverse flips the cross-start edge, so the baseline
+                  // group anchors to the line's cross-end instead.
+                  itemCrossOffset = wrapReverse
+                    ? lineLayout.crossSize -
+                      (lineLayout.baselineDescent ?? 0) -
+                      baselineOffset
+                    : lineLayout.baselineAscent - baselineOffset;
                 } else {
                   itemCrossOffset = crossMarginStart;
                 }

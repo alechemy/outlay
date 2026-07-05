@@ -224,7 +224,7 @@
       }
     ],
     "flexDirection": "row",
-    "flexWrap": "nowrap",
+    "flexWrap": "wrap",
     "width": 262,
     "height": 488,
     "alignItems": "baseline",
@@ -293,7 +293,7 @@
       "id": "node-3",
       "x": 83,
       "y": 3,
-      "width": 0,
+      "width": 95,
       "height": 129,
       "padding": {
         "top": 13,
@@ -313,16 +313,16 @@
         "bottom": 17,
         "left": 8
       },
-      "borderBoxWidth": 30,
+      "borderBoxWidth": 125,
       "borderBoxHeight": 170,
-      "outerWidth": 38,
+      "outerWidth": 133,
       "outerHeight": 190
     },
     "node-4": {
       "id": "node-4",
-      "x": 122,
-      "y": 37,
-      "width": 0,
+      "x": 9,
+      "y": 192,
+      "width": 50,
       "height": 104,
       "padding": {
         "top": 10,
@@ -342,15 +342,15 @@
         "bottom": 14,
         "left": 9
       },
-      "borderBoxWidth": 36,
+      "borderBoxWidth": 86,
       "borderBoxHeight": 136,
-      "outerWidth": 58,
+      "outerWidth": 108,
       "outerHeight": 152
     },
     "node-5": {
       "id": "node-5",
-      "x": 179,
-      "y": 105,
+      "x": 116,
+      "y": 260,
       "width": 51,
       "height": 48,
       "padding": {
@@ -378,8 +378,8 @@
     },
     "node-6": {
       "id": "node-6",
-      "x": 282,
-      "y": 145,
+      "x": 3,
+      "y": 401,
       "width": 25,
       "height": 9,
       "padding": {
@@ -407,8 +407,8 @@
     },
     "node-7": {
       "id": "node-7",
-      "x": 339,
-      "y": 105,
+      "x": 60,
+      "y": 361,
       "width": 12,
       "height": 38,
       "padding": {
@@ -436,9 +436,9 @@
     },
     "node-8": {
       "id": "node-8",
-      "x": 407,
-      "y": 109,
-      "width": 0,
+      "x": 128,
+      "y": 365,
+      "width": 30,
       "height": 31,
       "padding": {
         "top": 17,
@@ -458,9 +458,9 @@
         "bottom": 12,
         "left": 6
       },
-      "borderBoxWidth": 11,
+      "borderBoxWidth": 41,
       "borderBoxHeight": 64,
-      "outerWidth": 33,
+      "outerWidth": 63,
       "outerHeight": 81
     }
   },

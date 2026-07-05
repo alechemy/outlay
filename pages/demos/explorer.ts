@@ -21,7 +21,7 @@ interface TreeNode {
     height: number | "auto";
     flexDirection: "row" | "column" | "row-reverse" | "column-reverse";
     justifyContent: "flex-start" | "flex-end" | "center" | "space-between" | "space-around" | "space-evenly";
-    alignItems: "flex-start" | "flex-end" | "center" | "stretch";
+    alignItems: "flex-start" | "flex-end" | "center" | "stretch" | "baseline";
     flexWrap: "nowrap" | "wrap" | "wrap-reverse";
     gap: number;
     flexGrow: number;
@@ -399,7 +399,7 @@ function renderProps() {
   addSelectRow(panel, "justifyContent", node, [
     "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly",
   ]);
-  addSelectRow(panel, "alignItems", node, ["stretch", "flex-start", "flex-end", "center"]);
+  addSelectRow(panel, "alignItems", node, ["stretch", "flex-start", "flex-end", "center", "baseline"]);
   addSelectRow(panel, "flexWrap", node, ["nowrap", "wrap", "wrap-reverse"]);
   addSliderRow(panel, "gap", node, 0, 40, 1);
   addSliderRow(panel, "padding", node, 0, 40, 1);

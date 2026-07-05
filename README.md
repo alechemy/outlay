@@ -160,7 +160,7 @@ const textNode = {
 - Flexbox layout (row, column, reverse, wrap)
 - `flex-grow`, `flex-shrink`, `flex-basis` with iterative clamping
 - `justify-content`: all 6 values
-- `align-items` / `align-self` / `align-content` (`baseline` is accepted by the types but not implemented)
+- `align-items` / `align-self` (including `baseline`) / `align-content`
 - `gap` (single value and `{ row, column }`, including wrapped lines)
 - `min-width` / `max-width` / `min-height` / `max-height` on both axes
 - Multi-line wrapping (`wrap`, `wrap-reverse`)
@@ -182,7 +182,7 @@ const textNode = {
 
 ## Accuracy
 
-1625 fixtures across 14 tiers, all passing at 100%. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
+1725 fixtures across 15 tiers, all passing at 100%. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
 
 ## Performance
 

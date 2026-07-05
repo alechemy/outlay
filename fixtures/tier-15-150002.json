@@ -224,7 +224,7 @@
       }
     ],
     "flexDirection": "row",
-    "flexWrap": "nowrap",
+    "flexWrap": "wrap",
     "width": 309,
     "height": 342,
     "alignItems": "baseline",
@@ -263,8 +263,8 @@
     "node-2": {
       "id": "node-2",
       "x": 5,
-      "y": 122,
-      "width": 0,
+      "y": 118,
+      "width": 51,
       "height": 45,
       "padding": {
         "top": 3,
@@ -284,15 +284,15 @@
         "bottom": 11,
         "left": 5
       },
-      "borderBoxWidth": 29,
+      "borderBoxWidth": 80,
       "borderBoxHeight": 55,
-      "outerWidth": 47,
+      "outerWidth": 98,
       "outerHeight": 71
     },
     "node-3": {
       "id": "node-3",
-      "x": 51,
-      "y": 10,
+      "x": 102,
+      "y": 6,
       "width": 85,
       "height": 146,
       "padding": {
@@ -320,9 +320,9 @@
     },
     "node-4": {
       "id": "node-4",
-      "x": 172,
-      "y": 44,
-      "width": 0,
+      "x": 2,
+      "y": 190,
+      "width": 82,
       "height": 95,
       "padding": {
         "top": 10,
@@ -342,15 +342,15 @@
         "bottom": 3,
         "left": 2
       },
-      "borderBoxWidth": 29,
+      "borderBoxWidth": 111,
       "borderBoxHeight": 133,
-      "outerWidth": 42,
+      "outerWidth": 124,
       "outerHeight": 142
     },
     "node-5": {
       "id": "node-5",
-      "x": 231,
-      "y": 143,
+      "x": 143,
+      "y": 289,
       "width": 38,
       "height": 8,
       "padding": {
@@ -378,9 +378,9 @@
     },
     "node-6": {
       "id": "node-6",
-      "x": 323,
-      "y": 85,
-      "width": 0,
+      "x": 14,
+      "y": 425,
+      "width": 22,
       "height": 60,
       "padding": {
         "top": 10,
@@ -400,15 +400,15 @@
         "bottom": 9,
         "left": 14
       },
-      "borderBoxWidth": 29,
+      "borderBoxWidth": 51,
       "borderBoxHeight": 92,
-      "outerWidth": 44,
+      "outerWidth": 66,
       "outerHeight": 101
     },
     "node-7": {
       "id": "node-7",
-      "x": 359,
-      "y": 16,
+      "x": 72,
+      "y": 356,
       "width": 123,
       "height": 139,
       "padding": {
@@ -436,8 +436,8 @@
     },
     "node-8": {
       "id": "node-8",
-      "x": 536,
-      "y": 116,
+      "x": 18,
+      "y": 546,
       "width": 86,
       "height": 45,
       "padding": {

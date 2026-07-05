@@ -884,7 +884,7 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
     } else if (depth > 0) {
       node.display = "flex";
       node.flexDirection = cat === 5 ? "column" : "row";
-      node.flexWrap = cat === 2 ? rng.nextChoice(["wrap", "wrap", "nowrap"] as const) : "nowrap";
+      node.flexWrap = cat === 2 ? rng.nextChoice(["wrap", "wrap-reverse", "wrap"] as const) : "nowrap";
       node.width = rng.nextRange(cat === 2 ? 200 : 350, cat === 2 ? 420 : 720);
       if (cat === 1 || cat === 2) {
         // Auto cross size: container height derives from baseline line math.
