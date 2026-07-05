@@ -41,6 +41,14 @@
       h1 { font-size: 20px; margin: 0 0 4px; }
       p.lede { color: var(--muted); margin: 0 0 20px; max-width: 62ch; }
       code { background: var(--card); padding: 1px 5px; border-radius: 4px; }
+      a.back {
+        display: inline-block;
+        margin-bottom: 10px;
+        font: 12px/1.2 ui-monospace, monospace;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      a.back:hover { text-decoration: underline; color: var(--fg); }
       .controls {
         display: flex;
         align-items: center;
@@ -98,6 +106,7 @@
     </style>
   </head>
   <body>
+    <a class="back" href="index.html">← all demos</a>
     <h1>Text-driven layout — Pretext adapter</h1>
     <p class="lede">
       A CSS Grid of text cards solved off-DOM. Each card's wrapped height comes
