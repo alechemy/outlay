@@ -172,6 +172,7 @@ Two things to keep in mind:
 
 - **Browser/worker only.** `prepareWithSegments` (like `prepare`) needs an `OffscreenCanvas` or a DOM canvas for its measurement pass and throws in bare Node. Run it where a canvas exists, or precompute per-word advances offline and feed them to a greedy line breaker (this is exactly what the fixture suite does — measurement is captured from Chromium once, so a failing fixture indicts layout math, not text measurement).
 - **Match the CSS wrapping mode.** Pretext models `overflow-wrap: break-word` (it breaks inside long words at narrow widths), so render the same text with `overflow-wrap: anywhere` for the browser to agree at widths narrower than a word. With `overflow-wrap: normal` the min-content is the widest word instead.
+- **Quantize like the engine for exact agreement.** Chromium stores accumulated line widths and intrinsic text widths as LayoutUnit (1/64px, floored), so at knife-edge widths a word fits where raw float accumulation says it doesn't. A measurer chasing Chromium to sub-pixel precision must floor the running line width to 1/64 before the fit comparison and floor the widths it returns; the solver itself stays quantization-free, so this contract lives entirely in the `measureContent` implementation (see the fixture runner's breaker in `tests/runner.ts`).
 
 The `pages/demos/text-layout.html` demo wires this adapter into a live card grid and checks the solver against the browser at 0.5px tolerance.
 
@@ -236,7 +237,7 @@ Grid exclusions (v1): no percentage tracks (caller resolves them), no named line
 
 ## Accuracy
 
-3700 fixtures across 30 tiers; 3699 passing (one documented open edge in deeply nested text, tracked in the repo's known gaps). Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
+3700 fixtures across 30 tiers, all passing. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
 
 ## Performance
 

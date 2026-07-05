@@ -8,6 +8,14 @@ export interface WordMetrics {
 
 const table = metrics as WordMetrics;
 
+// Chromium stores accumulated line widths and intrinsic text widths as
+// LayoutUnit (1/64px, floored), so a word prefix can fit at a width that raw
+// float accumulation rejects by up to 1/64.
+const LAYOUT_UNIT = 1 / 64;
+function snapToLayoutUnit(width: number): number {
+  return Math.floor(width / LAYOUT_UNIT) * LAYOUT_UNIT;
+}
+
 export function wordAdvance(word: string): number {
   const advance = table.words[word];
   if (advance === undefined) {
@@ -37,7 +45,7 @@ export function measureText(
     let maxLine = cur;
     for (let i = 1; i < advances.length; i++) {
       const w = advances[i];
-      if (cur + spaceWidth + w <= availableWidth) {
+      if (snapToLayoutUnit(cur + spaceWidth + w) <= availableWidth) {
         cur += spaceWidth + w;
       } else {
         lines++;
@@ -45,7 +53,7 @@ export function measureText(
       }
       if (cur > maxLine) maxLine = cur;
     }
-    return { width: maxLine, height: lines * lineHeight };
+    return { width: snapToLayoutUnit(maxLine), height: lines * lineHeight };
   };
 }
 

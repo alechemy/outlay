@@ -3,6 +3,14 @@ import * as fs from "fs";
 import * as path from "path";
 import { solveLayout } from "../src/solver";
 
+// Chromium stores accumulated line widths and intrinsic text widths as
+// LayoutUnit (1/64px, floored), so a word prefix can fit at a width that raw
+// float accumulation rejects by up to 1/64.
+const LAYOUT_UNIT = 1 / 64;
+function snapToLayoutUnit(width: number): number {
+  return Math.floor(width / LAYOUT_UNIT) * LAYOUT_UNIT;
+}
+
 function runTests() {
   const fixturesDir = path.join(import.meta.dirname, "..", "fixtures");
   if (!fs.existsSync(fixturesDir)) {
@@ -85,7 +93,7 @@ function runTests() {
             let maxLine = cur;
             for (let i = 1; i < wordWidths.length; i++) {
               const w = wordWidths[i];
-              if (cur + spaceWidth + w <= availableWidth) {
+              if (snapToLayoutUnit(cur + spaceWidth + w) <= availableWidth) {
                 cur += spaceWidth + w;
               } else {
                 lines++;
@@ -93,7 +101,10 @@ function runTests() {
               }
               if (cur > maxLine) maxLine = cur;
             }
-            return { width: maxLine, height: lines * lineHeight };
+            return {
+              width: snapToLayoutUnit(maxLine),
+              height: lines * lineHeight,
+            };
           };
         }
         if (node.children) {
