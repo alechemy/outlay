@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Drag-and-Drop Reorder — constraint-layout-algo</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      :root {
+        color-scheme: light;
+        --page: #f5f1ea;
+        --panel: #fffdf8;
+        --ink: #201b18;
+        --muted: #6d645d;
+        --rule: #d8cec3;
+        --accent: #955f3b;
+        --accent-light: #c4865e;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(180deg, #fbf7f0 0%, var(--page) 100%);
+        color: var(--ink);
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+      .page {
+        width: min(940px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+      a.back {
+        font:
+          12px/1.2 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a.back:hover {
+        text-decoration: underline;
+      }
+      .eyebrow {
+        margin: 12px 0 6px;
+        font:
+          12px/1.2 "SF Mono",
+          ui-monospace,
+          monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      h1 {
+        margin: 0;
+        font:
+          700 30px/1.08 Georgia,
+          "Times New Roman",
+          serif;
+      }
+      .intro {
+        margin: 10px 0 0;
+        max-width: 66ch;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .intro code {
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        padding: 0 4px;
+        font:
+          12px/1.4 "SF Mono",
+          ui-monospace,
+          monospace;
+      }
+      .toolbar {
+        margin-top: 20px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .btn {
+        font:
+          500 12px/1 "Helvetica Neue",
+          Helvetica,
+          Arial,
+          sans-serif;
+        padding: 7px 12px;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--ink);
+        cursor: pointer;
+        transition:
+          background 100ms,
+          border-color 100ms;
+      }
+      .btn:hover {
+        border-color: var(--accent-light);
+        background: #faf3ea;
+      }
+      .stat {
+        font:
+          11px/1.4 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--muted);
+      }
+      .stat strong {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      .board-wrap {
+        margin-top: 22px;
+      }
+      .board {
+        position: relative;
+        border: 1px dashed var(--rule);
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--panel) 92%, white 8%);
+        box-shadow: 0 18px 40px rgb(54 40 23 / 0.08);
+        touch-action: none;
+      }
+      .card {
+        position: absolute;
+        left: 0;
+        top: 0;
+        border-radius: 10px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        box-shadow: 0 2px 6px rgb(54 40 23 / 0.08);
+        cursor: grab;
+        user-select: none;
+        transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 12px 14px;
+        overflow: hidden;
+      }
+      .card .idx {
+        font:
+          600 12px/1 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: rgba(32, 27, 24, 0.45);
+      }
+      .card .name {
+        margin-top: 6px;
+        font:
+          600 15px/1.2 "Helvetica Neue",
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: rgba(32, 27, 24, 0.8);
+      }
+      .card.dragging {
+        transition: none;
+        cursor: grabbing;
+        z-index: 10;
+        box-shadow: 0 16px 34px rgb(54 40 23 / 0.26);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <a class="back" href="/demos/index.html">← all demos</a>
+      <p class="eyebrow">constraint-layout-algo</p>
+      <h1>Drag-and-Drop Reorder</h1>
+      <p class="intro">
+        Grab a card and drag it. On every pointer move the solver re-runs
+        <code>solveLayout</code> over the whole grid to work out where each card
+        belongs, and the others glide to make room via
+        <code>transform: translate()</code>. Nothing here touches DOM layout mid-
+        drag — the reflow that normally makes this janky simply never happens.
+      </p>
+
+      <div class="toolbar">
+        <button class="btn" id="shuffle">Shuffle</button>
+        <span class="stat" id="stat"></span>
+      </div>
+
+      <div class="board-wrap">
+        <div class="board" id="board"></div>
+      </div>
+    </main>
+
+    <script type="module" src="./drag-reorder.ts"></script>
+  </body>
+</html>
