@@ -123,6 +123,26 @@ async function setSizeFixed(page: Page, prop: string, value: number): Promise<vo
   );
 }
 
+async function setText(page: Page, prop: string, value: string): Promise<void> {
+  await page.evaluate(
+    (p: string, v: string) => {
+      const row = [...document.querySelectorAll<HTMLElement>("#props .prop-row")].find(
+        (r) => r.querySelector("label")?.textContent === p,
+      );
+      const input = row?.querySelector<HTMLInputElement>('input[type="text"]');
+      if (!input) throw new Error(`text input for ${p} not found`);
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!;
+      setter.call(input, v);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+    prop,
+    value,
+  );
+}
+
 async function addChildToSelected(page: Page): Promise<void> {
   await page.evaluate(() => {
     document.getElementById("btn-add-root-child")!.click();
@@ -235,6 +255,104 @@ async function main() {
     await setSlider(page, "gap", 6);
     await setSelect(page, "flexDirection", "column");
     await check("nested column container with gap 6");
+
+    const reloadClean = async () => {
+      await page.goto(URL, { waitUntil: "networkidle0" });
+      await page.evaluate(NAME_SHIM);
+    };
+
+    console.log("Scenario: grid fixed tracks with explicit placement");
+    await reloadClean();
+    await setSelect(page, "display", "grid");
+    await setSizeFixed(page, "width", 420);
+    await setSizeFixed(page, "height", 280);
+    await setText(page, "gridTemplateColumns", "120px 120px 120px");
+    await setText(page, "gridTemplateRows", "80px 80px");
+    await check("grid 3x2 fixed tracks, auto placement");
+    await selectTreeNode(page, "node-2");
+    await setText(page, "gridColumn", "3 / 4");
+    await setText(page, "gridRow", "1 / 2");
+    await check("explicit placement (col 3, row 1)");
+    await selectTreeNode(page, "node-3");
+    await setText(page, "gridColumn", "1 / 2");
+    await setText(page, "gridRow", "2 / 3");
+    await check("explicit placement (col 1, row 2)");
+
+    console.log("Scenario: grid fr + auto tracks");
+    await selectTreeNode(page, "node-1");
+    await setText(page, "gridTemplateColumns", "100px 1fr auto");
+    await setText(page, "gridTemplateRows", "60px auto");
+    await selectTreeNode(page, "node-4");
+    await setText(page, "gridColumn", "3 / 4");
+    await setText(page, "gridRow", "2 / 3");
+    await setSizeFixed(page, "width", 90);
+    await setSizeFixed(page, "height", 70);
+    await check("fr + auto tracks (auto sizes to content)");
+
+    console.log("Scenario: grid column span");
+    await selectTreeNode(page, "node-2");
+    await setText(page, "gridColumn", "1 / span 2");
+    await setText(page, "gridRow", "1 / 2");
+    await check("column span 2");
+
+    console.log("Scenario: grid justify/align variations");
+    await reloadClean();
+    await setSelect(page, "display", "grid");
+    await setSizeFixed(page, "width", 500);
+    await setSizeFixed(page, "height", 320);
+    await setText(page, "gridTemplateColumns", "80px 80px");
+    await setText(page, "gridTemplateRows", "60px 60px");
+    await setSlider(page, "gap", 10);
+    for (const id of ["node-2", "node-3", "node-4"]) {
+      await selectTreeNode(page, id);
+      await setSizeFixed(page, "width", 40);
+      await setSizeFixed(page, "height", 30);
+    }
+    await selectTreeNode(page, "node-1");
+    const gridAlign: [string, string][] = [
+      ["justifyContent", "center"],
+      ["justifyContent", "space-between"],
+      ["justifyContent", "flex-end"],
+      ["justifyItems", "center"],
+      ["justifyItems", "end"],
+      ["alignContent", "center"],
+      ["alignContent", "space-between"],
+      ["alignItems", "flex-end"],
+    ];
+    for (const [prop, val] of gridAlign) {
+      await setSelect(page, prop, val);
+      await check(`${prop}: ${val}`);
+    }
+    await selectTreeNode(page, "node-2");
+    await setSelect(page, "justifySelf", "end");
+    await check("item justifySelf: end");
+    await setSelect(page, "alignSelf", "center");
+    await check("item alignSelf: center");
+
+    console.log("Scenario: grid auto-placement with implicit rows");
+    await reloadClean();
+    await setSelect(page, "display", "grid");
+    await setSizeFixed(page, "height", 400);
+    await setText(page, "gridTemplateColumns", "90px 90px");
+    await setText(page, "gridTemplateRows", "50px");
+    for (const id of ["node-2", "node-3", "node-4"]) {
+      await selectTreeNode(page, id);
+      await setSizeFixed(page, "height", 45);
+    }
+    await selectTreeNode(page, "node-1");
+    await addChildToSelected(page);
+    await addChildToSelected(page);
+    await check("auto-placement, 5 items, implicit rows");
+    await setSelect(page, "gridAutoFlow", "row dense");
+    await check("gridAutoFlow: row dense");
+
+    console.log("Scenario: grid repeat(auto-fill, minmax)");
+    await reloadClean();
+    await setSelect(page, "display", "grid");
+    await setSizeFixed(page, "width", 520);
+    await setText(page, "gridTemplateColumns", "repeat(auto-fill, minmax(100px, 1fr))");
+    await setText(page, "gridTemplateRows", "80px");
+    await check("repeat(auto-fill, minmax(100px, 1fr))");
 
     await page.screenshot({
       path: path.join(SHOT_DIR, "final.png") as `${string}.png`,

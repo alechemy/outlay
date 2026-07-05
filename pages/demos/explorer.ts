@@ -1,5 +1,6 @@
 import type { LayoutNode, ResolvedBox } from "constraint-layout-algo";
 import { solveLayout } from "constraint-layout-algo";
+import { gridStyleDeclarations } from "../../tests/grid-css";
 
 // --- Color palette for boxes ---
 const COLORS = [
@@ -19,14 +20,24 @@ interface TreeNode {
   props: {
     width: number | "auto";
     height: number | "auto";
+    display: "flex" | "grid";
     flexDirection: "row" | "column" | "row-reverse" | "column-reverse";
     justifyContent: "flex-start" | "flex-end" | "center" | "space-between" | "space-around" | "space-evenly";
     alignItems: "flex-start" | "flex-end" | "center" | "stretch" | "baseline";
+    alignContent: "flex-start" | "flex-end" | "center" | "stretch" | "space-between" | "space-around";
     flexWrap: "nowrap" | "wrap" | "wrap-reverse";
     gap: number;
     flexGrow: number;
     flexShrink: number;
     padding: number;
+    gridTemplateColumns: string;
+    gridTemplateRows: string;
+    gridAutoFlow: "row" | "column" | "row dense" | "column dense";
+    justifyItems: "start" | "end" | "center" | "stretch";
+    gridColumn: string;
+    gridRow: string;
+    justifySelf: "auto" | "start" | "end" | "center" | "stretch";
+    alignSelf: "auto" | "flex-start" | "flex-end" | "center" | "stretch" | "baseline";
   };
   children: TreeNode[];
   collapsed: boolean;
@@ -43,14 +54,24 @@ function createNode(overrides?: Partial<TreeNode["props"]>): TreeNode {
     props: {
       width: "auto",
       height: "auto",
+      display: "flex",
       flexDirection: "row",
       justifyContent: "flex-start",
       alignItems: "stretch",
+      alignContent: "stretch",
       flexWrap: "nowrap",
       gap: 0,
       flexGrow: 0,
       flexShrink: 1,
       padding: 0,
+      gridTemplateColumns: "",
+      gridTemplateRows: "",
+      gridAutoFlow: "row",
+      justifyItems: "stretch",
+      gridColumn: "auto",
+      gridRow: "auto",
+      justifySelf: "auto",
+      alignSelf: "auto",
       ...overrides,
     },
     children: [],
@@ -59,30 +80,21 @@ function createNode(overrides?: Partial<TreeNode["props"]>): TreeNode {
 }
 
 // Build default tree
-const root: TreeNode = {
-  id: makeId(),
-  props: {
-    width: 500,
-    height: 400,
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    alignItems: "stretch",
-    flexWrap: "nowrap",
-    gap: 8,
-    flexGrow: 0,
-    flexShrink: 1,
-    padding: 12,
-  },
-  children: [
-    createNode({ width: 80, height: "auto", flexGrow: 1 }),
-    createNode({ width: 80, height: "auto", flexGrow: 2 }),
-    createNode({ width: 80, height: "auto", flexGrow: 1 }),
-  ],
-  collapsed: false,
-};
+const root: TreeNode = createNode({
+  width: 500,
+  height: 400,
+  gap: 8,
+  padding: 12,
+});
+root.children = [
+  createNode({ width: 80, height: "auto", flexGrow: 1 }),
+  createNode({ width: 80, height: "auto", flexGrow: 2 }),
+  createNode({ width: 80, height: "auto", flexGrow: 1 }),
+];
 
 let selectedId: string | null = root.id;
 let lastResult: Map<string, ResolvedBox> = new Map();
+let lnById: Map<string, LayoutNode> = new Map();
 
 // --- Tree helpers ---
 function findNode(node: TreeNode, id: string): TreeNode | null {
@@ -124,29 +136,162 @@ function removeNode(parent: TreeNode, id: string): boolean {
   return false;
 }
 
+// --- Grid preset parsing ---
+type TrackSize = NonNullable<LayoutNode["gridTemplateColumns"]>[number];
+
+function splitTopLevel(input: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of input.trim()) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (/\s/.test(ch) && depth === 0) {
+      if (current) parts.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+function splitCommaTopLevel(input: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of input) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function parseTrackScalar(token: string): TrackSize {
+  const t = token.trim();
+  if (t === "auto") return "auto";
+  if (t === "min-content") return "min-content";
+  if (t === "max-content") return "max-content";
+  if (/^[\d.]+fr$/.test(t)) return t as `${number}fr`;
+  if (/^[\d.]+px$/.test(t)) return parseFloat(t);
+  if (/^[\d.]+$/.test(t)) return parseFloat(t);
+  if (t.startsWith("minmax(") && t.endsWith(")")) {
+    const [min, max] = splitCommaTopLevel(t.slice("minmax(".length, -1));
+    return {
+      min: parseTrackScalar(min) as { min: any }["min"],
+      max: parseTrackScalar(max) as { max: any }["max"],
+    } as TrackSize;
+  }
+  return "auto";
+}
+
+function parseTrackList(input: string): TrackSize[] {
+  if (!input.trim()) return [];
+  const out: TrackSize[] = [];
+  for (const token of splitTopLevel(input)) {
+    if (token.startsWith("repeat(") && token.endsWith(")")) {
+      const inner = token.slice("repeat(".length, -1);
+      const commaIdx = inner.indexOf(",");
+      const countRaw = inner.slice(0, commaIdx).trim();
+      const tracksRaw = inner.slice(commaIdx + 1).trim();
+      const count: number | "auto-fill" | "auto-fit" =
+        countRaw === "auto-fill" || countRaw === "auto-fit"
+          ? countRaw
+          : parseInt(countRaw, 10);
+      out.push({
+        repeat: count,
+        tracks: splitTopLevel(tracksRaw).map(parseTrackScalar),
+      } as TrackSize);
+    } else {
+      out.push(parseTrackScalar(token));
+    }
+  }
+  return out;
+}
+
+function parseGridLine(
+  input: string,
+): { start: number | "auto"; end: number | "auto" | `span ${number}` } | undefined {
+  const s = input.trim();
+  if (!s || s === "auto" || s === "auto / auto") return undefined;
+  const parts = s.split("/").map((p) => p.trim());
+  const parseStart = (t: string): number | "auto" =>
+    t === "auto" || t === "" ? "auto" : Number(t);
+  const parseEnd = (t: string): number | "auto" | `span ${number}` => {
+    if (t === "auto" || t === "") return "auto";
+    if (/^span\s+\d+$/.test(t)) return `span ${parseInt(t.slice(4).trim(), 10)}`;
+    return Number(t);
+  };
+  if (parts.length === 1) {
+    const only = parts[0];
+    if (/^span\s+\d+$/.test(only)) {
+      return { start: "auto", end: `span ${parseInt(only.slice(4).trim(), 10)}` };
+    }
+    return { start: parseStart(only), end: "auto" };
+  }
+  return { start: parseStart(parts[0]), end: parseEnd(parts[1]) };
+}
+
 // --- Convert tree to LayoutNode ---
-function toLayoutNode(node: TreeNode): LayoutNode {
+function toLayoutNode(node: TreeNode, parentDisplay?: "flex" | "grid"): LayoutNode {
+  const p = node.props;
   const ln: LayoutNode = {
     id: node.id,
-    display: "flex",
-    flexDirection: node.props.flexDirection,
-    justifyContent: node.props.justifyContent,
-    alignItems: node.props.alignItems,
-    flexWrap: node.props.flexWrap,
-    gap: node.props.gap,
-    flexGrow: node.props.flexGrow,
-    flexShrink: node.props.flexShrink,
-    padding: node.props.padding,
-    children: node.children.map(toLayoutNode),
+    display: p.display,
+    padding: p.padding,
+    children: node.children.map((c) => toLayoutNode(c, p.display)),
   };
-  if (node.props.width !== "auto") ln.width = node.props.width;
-  if (node.props.height !== "auto") ln.height = node.props.height;
+  if (p.width !== "auto") ln.width = p.width;
+  if (p.height !== "auto") ln.height = p.height;
+  if (p.gap) ln.gap = p.gap;
+
+  if (p.display === "flex") {
+    ln.flexDirection = p.flexDirection;
+    ln.justifyContent = p.justifyContent;
+    ln.alignItems = p.alignItems;
+    ln.flexWrap = p.flexWrap;
+  } else {
+    const cols = parseTrackList(p.gridTemplateColumns);
+    const rows = parseTrackList(p.gridTemplateRows);
+    if (cols.length) ln.gridTemplateColumns = cols;
+    if (rows.length) ln.gridTemplateRows = rows;
+    if (p.gridAutoFlow !== "row") ln.gridAutoFlow = p.gridAutoFlow;
+    ln.justifyItems = p.justifyItems;
+    ln.justifyContent = p.justifyContent;
+    ln.alignItems = p.alignItems;
+    ln.alignContent = p.alignContent;
+  }
+
+  if (parentDisplay === "grid") {
+    const gc = parseGridLine(p.gridColumn);
+    const gr = parseGridLine(p.gridRow);
+    if (gc) ln.gridColumn = gc;
+    if (gr) ln.gridRow = gr;
+    if (p.justifySelf !== "auto") ln.justifySelf = p.justifySelf;
+    if (p.alignSelf !== "auto") ln.alignSelf = p.alignSelf;
+  } else if (parentDisplay === "flex") {
+    ln.flexGrow = p.flexGrow;
+    ln.flexShrink = p.flexShrink;
+    if (p.alignSelf !== "auto") ln.alignSelf = p.alignSelf;
+  }
   return ln;
 }
 
+function indexLayoutNodes(ln: LayoutNode, map: Map<string, LayoutNode>): void {
+  map.set(ln.id, ln);
+  for (const c of ln.children ?? []) indexLayoutNodes(c, map);
+}
+
 // --- Solve and render ---
-function solve(): Map<string, ResolvedBox> {
-  const layoutTree = toLayoutNode(root);
+function solve(layoutTree: LayoutNode): Map<string, ResolvedBox> {
   const t0 = performance.now();
   const result = solveLayout(layoutTree);
   const dt = performance.now() - t0;
@@ -191,7 +336,7 @@ function renderOutput(boxes: Map<string, ResolvedBox>) {
     if (box.borderBoxWidth > 50 && box.borderBoxHeight > 24) {
       const dims = document.createElement("span");
       dims.className = "layout-box-dims";
-      dims.textContent = `${w}\u00d7${h}`;
+      dims.textContent = `${w}×${h}`;
       el.appendChild(dims);
     }
 
@@ -212,26 +357,46 @@ function renderOutput(boxes: Map<string, ResolvedBox>) {
 }
 
 // --- Browser CSS reference pane ---
+function refStyleDecls(ln: LayoutNode): string[] {
+  const d: string[] = [`display: ${ln.display}`];
+  if (ln.width !== undefined)
+    d.push(`width: ${typeof ln.width === "number" ? ln.width + "px" : ln.width}`);
+  if (ln.height !== undefined)
+    d.push(`height: ${typeof ln.height === "number" ? ln.height + "px" : ln.height}`);
+  d.push(`padding: ${ln.padding ?? 0}px`);
+  if (ln.gap !== undefined) d.push(`gap: ${ln.gap}px`);
+
+  if (ln.display === "flex") {
+    if (ln.flexDirection) d.push(`flex-direction: ${ln.flexDirection}`);
+    if (ln.flexWrap) d.push(`flex-wrap: ${ln.flexWrap}`);
+    if (ln.justifyContent) d.push(`justify-content: ${ln.justifyContent}`);
+    if (ln.alignItems) d.push(`align-items: ${ln.alignItems}`);
+  } else if (ln.display === "grid") {
+    if (ln.justifyContent) d.push(`justify-content: ${ln.justifyContent}`);
+    if (ln.alignItems) d.push(`align-items: ${ln.alignItems}`);
+    if (ln.alignContent) d.push(`align-content: ${ln.alignContent}`);
+  }
+
+  d.push(...gridStyleDeclarations(ln));
+
+  if (ln.flexGrow !== undefined) d.push(`flex-grow: ${ln.flexGrow}`);
+  if (ln.flexShrink !== undefined) d.push(`flex-shrink: ${ln.flexShrink}`);
+  if (ln.alignSelf && ln.alignSelf !== "auto")
+    d.push(`align-self: ${ln.alignSelf}`);
+  return d;
+}
+
 function renderReference() {
   const container = document.getElementById("ref-output")!;
   container.innerHTML = "";
 
   function buildRef(node: TreeNode, depth: number): HTMLElement {
-    const p = node.props;
     const el = document.createElement("div");
     el.className = "ref-box" + (node.id === selectedId ? " highlighted" : "");
     el.dataset.refId = node.id;
-    el.style.display = "flex";
-    if (p.width !== "auto") el.style.width = p.width + "px";
-    if (p.height !== "auto") el.style.height = p.height + "px";
-    el.style.flexDirection = p.flexDirection;
-    el.style.justifyContent = p.justifyContent;
-    el.style.alignItems = p.alignItems;
-    el.style.flexWrap = p.flexWrap;
-    el.style.gap = p.gap + "px";
-    el.style.padding = p.padding + "px";
-    el.style.flexGrow = String(p.flexGrow);
-    el.style.flexShrink = String(p.flexShrink);
+
+    const ln = lnById.get(node.id);
+    if (ln) el.style.cssText = refStyleDecls(ln).join("; ");
     el.style.background = colorForDepth(depth);
 
     const label = document.createElement("span");
@@ -328,7 +493,7 @@ function renderTree() {
     const toggle = document.createElement("span");
     toggle.className = "tree-node-toggle";
     if (node.children.length > 0) {
-      toggle.textContent = node.collapsed ? "\u25b6" : "\u25bc";
+      toggle.textContent = node.collapsed ? "▶" : "▼";
       toggle.addEventListener("click", (e) => {
         e.stopPropagation();
         node.collapsed = !node.collapsed;
@@ -339,14 +504,17 @@ function renderTree() {
 
     const label = document.createElement("span");
     label.className = "tree-node-label";
-    const dir = node.props.flexDirection
-      .replace("column", "col")
-      .replace("-reverse", "-rev");
+    const kind =
+      node.props.display === "grid"
+        ? "grid"
+        : node.props.flexDirection
+            .replace("column", "col")
+            .replace("-reverse", "-rev");
     const sizeStr =
       (node.props.width === "auto" ? "auto" : node.props.width) +
-      "\u00d7" +
+      "×" +
       (node.props.height === "auto" ? "auto" : node.props.height);
-    label.textContent = `${node.id} (${dir}, ${sizeStr})`;
+    label.textContent = `${node.id} (${kind}, ${sizeStr})`;
     row.appendChild(label);
 
     row.addEventListener("click", () => {
@@ -389,25 +557,56 @@ function renderProps() {
   panel.appendChild(h3);
 
   const isRoot = node.id === root.id;
+  const parent = findParent(root, node.id);
+  const parentDisplay = parent?.props.display;
 
-  // Size controls
+  addSelectRow(panel, "display", node, ["flex", "grid"]);
   addSizeRow(panel, "width", node);
   addSizeRow(panel, "height", node);
-
-  // Flex container controls
-  addSelectRow(panel, "flexDirection", node, ["row", "column", "row-reverse", "column-reverse"]);
-  addSelectRow(panel, "justifyContent", node, [
-    "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly",
-  ]);
-  addSelectRow(panel, "alignItems", node, ["stretch", "flex-start", "flex-end", "center", "baseline"]);
-  addSelectRow(panel, "flexWrap", node, ["nowrap", "wrap", "wrap-reverse"]);
-  addSliderRow(panel, "gap", node, 0, 40, 1);
   addSliderRow(panel, "padding", node, 0, 40, 1);
+  addSliderRow(panel, "gap", node, 0, 40, 1);
 
-  // Flex item controls (not for root)
+  if (node.props.display === "grid") {
+    addTextRow(panel, "gridTemplateColumns", node, "e.g. 100px 1fr auto", [
+      "100px 1fr auto",
+      "120px 120px 120px",
+      "repeat(2, 120px)",
+      "repeat(auto-fill, minmax(100px, 1fr))",
+      "minmax(80px, 1fr) auto 1fr",
+    ]);
+    addTextRow(panel, "gridTemplateRows", node, "e.g. 80px auto", [
+      "80px 80px",
+      "1fr auto",
+      "repeat(3, 60px)",
+    ]);
+    addSelectRow(panel, "gridAutoFlow", node, ["row", "column", "row dense", "column dense"]);
+    addSelectRow(panel, "justifyItems", node, ["stretch", "start", "end", "center"]);
+    addSelectRow(panel, "justifyContent", node, [
+      "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly",
+    ]);
+    addSelectRow(panel, "alignContent", node, [
+      "stretch", "flex-start", "flex-end", "center", "space-between", "space-around",
+    ]);
+    addSelectRow(panel, "alignItems", node, ["stretch", "flex-start", "flex-end", "center", "baseline"]);
+  } else {
+    addSelectRow(panel, "flexDirection", node, ["row", "column", "row-reverse", "column-reverse"]);
+    addSelectRow(panel, "justifyContent", node, [
+      "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly",
+    ]);
+    addSelectRow(panel, "alignItems", node, ["stretch", "flex-start", "flex-end", "center", "baseline"]);
+    addSelectRow(panel, "flexWrap", node, ["nowrap", "wrap", "wrap-reverse"]);
+  }
+
   if (!isRoot) {
-    addSliderRow(panel, "flexGrow", node, 0, 10, 1);
-    addSliderRow(panel, "flexShrink", node, 0, 10, 1);
+    if (parentDisplay === "grid") {
+      addTextRow(panel, "gridColumn", node, "start / end, e.g. 1 / 3 or 2 / span 2");
+      addTextRow(panel, "gridRow", node, "start / end, e.g. 1 / 2");
+      addSelectRow(panel, "justifySelf", node, ["auto", "start", "end", "center", "stretch"]);
+      addSelectRow(panel, "alignSelf", node, ["auto", "flex-start", "flex-end", "center", "stretch", "baseline"]);
+    } else {
+      addSliderRow(panel, "flexGrow", node, 0, 10, 1);
+      addSliderRow(panel, "flexShrink", node, 0, 10, 1);
+    }
   }
 
   // Action buttons
@@ -501,10 +700,54 @@ function addSelectRow(
   }
   select.addEventListener("change", () => {
     (node.props as any)[prop] = select.value;
-    solveAndRender();
+    if (prop === "display") update();
+    else solveAndRender();
   });
 
   row.appendChild(select);
+  panel.appendChild(row);
+}
+
+let datalistSeq = 0;
+function addTextRow(
+  panel: HTMLElement,
+  prop: keyof TreeNode["props"],
+  node: TreeNode,
+  placeholder: string,
+  presets?: string[],
+) {
+  const row = document.createElement("div");
+  row.className = "prop-row";
+
+  const label = document.createElement("label");
+  label.textContent = prop;
+  label.title = prop;
+  row.appendChild(label);
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = placeholder;
+  input.value = String(node.props[prop] ?? "");
+
+  if (presets && presets.length) {
+    const listId = `dl-${prop}-${datalistSeq++}`;
+    const datalist = document.createElement("datalist");
+    datalist.id = listId;
+    for (const preset of presets) {
+      const o = document.createElement("option");
+      o.value = preset;
+      datalist.appendChild(o);
+    }
+    input.setAttribute("list", listId);
+    row.appendChild(datalist);
+  }
+
+  input.addEventListener("input", () => {
+    (node.props as any)[prop] = input.value;
+    solveAndRender();
+  });
+
+  row.appendChild(input);
   panel.appendChild(row);
 }
 
@@ -617,7 +860,10 @@ function renderDetail() {
 
 // --- Solve without re-rendering tree/props (for slider dragging) ---
 function solveAndRender() {
-  const boxes = solve();
+  const layoutTree = toLayoutNode(root);
+  lnById = new Map();
+  indexLayoutNodes(layoutTree, lnById);
+  const boxes = solve(layoutTree);
   renderOutput(boxes);
   renderReference();
   renderMatchStatus(compareOutputs(boxes));
@@ -626,7 +872,10 @@ function solveAndRender() {
 
 // --- Full update ---
 function update() {
-  const boxes = solve();
+  const layoutTree = toLayoutNode(root);
+  lnById = new Map();
+  indexLayoutNodes(layoutTree, lnById);
+  const boxes = solve(layoutTree);
   renderTree();
   renderProps();
   renderOutput(boxes);
