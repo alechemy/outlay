@@ -72,7 +72,7 @@ interface LayoutNode {
   boxSizing?: "content-box" | "border-box";
 
   // Flex container
-  display?: "flex" | "block" | "none"; // "grid" reserved for future use
+  display?: "flex" | "grid" | "block" | "none";
   flexDirection?: "row" | "column" | "row-reverse" | "column-reverse";
   flexWrap?: "nowrap" | "wrap" | "wrap-reverse";
   justifyContent?:
@@ -142,18 +142,38 @@ interface ResolvedBox {
 
 ### `measureContent` callback
 
-For leaf nodes whose content size is externally determined (e.g., text measured by Pretext). Called with the available width from the flex algorithm; returns the intrinsic `{ width, height }` of the content.
+For leaf nodes whose content size is externally determined (e.g. text). Called with the available content width; returns the intrinsic `{ width, height }` of the content at that width. The solver probes it at `0` (min-content) and `Infinity` (max-content) as well as at resolved widths, so **return the real content width, not the available width** — grid track sizing and `min-width: auto` floors depend on it.
+
+See [Text](#text) for the Pretext adapter.
+
+## Text
+
+The engine does no line breaking itself. A text leaf is a node with a `measureContent` callback that reports the wrapped `{ width, height }` for a given available width. The solver measures each text item at its resolved width — the flex main size, or the grid column width after tracks resolve — so wrapped heights drive flex cross sizes and grid auto rows, and the widest word (`measureContent(0).width`) floors `min-width: auto` and intrinsic tracks.
+
+Any measurer that honors that contract works. [Pretext](https://github.com/chenglou/pretext) is a natural fit — the same "extract a DOM computation into arithmetic" idea, for text:
 
 ```ts
-const textNode = {
-  id: "label",
-  measureContent: (availableWidth) => {
-    const prepared = prepare(text, font);
-    const { height } = layout(prepared, availableWidth, lineHeight);
-    return { width: availableWidth, height };
-  },
-};
+import { measureLineStats, prepareWithSegments } from "@chenglou/pretext";
+
+function makeTextMeasure(text: string, font: string, lineHeight: number) {
+  const prepared = prepareWithSegments(text, font); // one canvas pass, reusable
+  return (availableWidth: number) => {
+    const { lineCount, maxLineWidth } = measureLineStats(prepared, availableWidth);
+    return { width: maxLineWidth, height: Math.max(1, lineCount) * lineHeight };
+  };
+}
+
+const label = { id: "label", measureContent: makeTextMeasure(text, "16px Arial", 20) };
 ```
+
+`measureLineStats` reports the widest line and the line count, which map directly onto the `{ width, height }` the solver expects at every probe width.
+
+Two things to keep in mind:
+
+- **Browser/worker only.** `prepareWithSegments` (like `prepare`) needs an `OffscreenCanvas` or a DOM canvas for its measurement pass and throws in bare Node. Run it where a canvas exists, or precompute per-word advances offline and feed them to a greedy line breaker (this is exactly what the fixture suite does — measurement is captured from Chromium once, so a failing fixture indicts layout math, not text measurement).
+- **Match the CSS wrapping mode.** Pretext models `overflow-wrap: break-word` (it breaks inside long words at narrow widths), so render the same text with `overflow-wrap: anywhere` for the browser to agree at widths narrower than a word. With `overflow-wrap: normal` the min-content is the widest word instead.
+
+The `pages/demos/text-layout.html` demo wires this adapter into a live card grid and checks the solver against the browser at 0.5px tolerance.
 
 ## What's supported
 
@@ -166,6 +186,7 @@ const textNode = {
 - Multi-line wrapping (`wrap`, `wrap-reverse`)
 - Nested flex containers with indefinite size resolution
 - `min-content` / `max-content` intrinsic sizing on container widths/heights and on flex items
+- Width-dependent content via `measureContent` (e.g. text): items are measured at their resolved main size, so wrapped heights drive cross sizes, and the widest word floors `min-width: auto` and feeds line breaking (see [Text](#text))
 - `display: block` containers with children, nested anywhere in a flex tree
 - `position: absolute` and `position: fixed`
 - `margin: auto` centering (both axes)
@@ -181,6 +202,7 @@ CSS Grid (`display: "grid"`):
 - `gap` (single value and `{ row, column }`)
 - Alignment: `justifyItems` / `justifySelf`, `alignItems` / `alignSelf` (flex vocabulary; `flex-start`/`flex-end` behave as `start`/`end`), `justifyContent` / `alignContent` distribution, auto margins
 - Grid and flex compose: grid inside flex, flex inside grid, nested grids, including intrinsic sizing of nested grids
+- Text in grid cells: auto rows sized by wrapped text at the resolved column width; text `measureContent` feeds min-content (widest word) and max-content (single line) track contributions
 
 Grid exclusions (v1): no percentage tracks (caller resolves them), no named lines or `grid-template-areas` (caller resolves to line numbers), no subgrid, no masonry, no grid baseline alignment.
 
@@ -194,7 +216,7 @@ Grid exclusions (v1): no percentage tracks (caller resolves them), no named line
 
 ## Accuracy
 
-3040 fixtures across 25 tiers, all passing at 100%. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
+3340 fixtures across 27 tiers, all passing at 100%. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
 
 ## Performance
 

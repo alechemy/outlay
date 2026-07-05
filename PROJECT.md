@@ -316,6 +316,12 @@ Tests are organized into numbered tiers of increasing difficulty. All unlocked t
 
 **Tier 24: Grid auto-repeat** — `repeat(auto-fill)` / `repeat(auto-fit)` with px and `minmax(px, 1fr)` tracks, fixed tracks around the repeat, auto-fill rows, auto-fit empty-track collapse (including gap collapse) observed via content distribution. ~120 fixtures.
 
+**Tier 25: Grid content items** — constant-size `measureContent` items inside grid cells (fixed dimensions independent of available width), across `auto`/`fr`/px tracks, spans, and `justifyItems` variety. ~120 fixtures.
+
+**Tier 26: Text in flex** — width-dependent text items as flex children (row and column direction), grow/shrink around text, wrap where the text item's hypothetical size drives line breaking, `min-width:auto` floored from the widest word. Text measured via captured word widths + greedy line breaking. ~150 fixtures.
+
+**Tier 27: Text in grid** — text-driven track sizing: text items in `auto`/`fr`/`minmax()`/px columns feeding min-content (widest word) and max-content (single line) contributions; auto-height rows sized by wrapped text at the resolved column width; fit-content (`justifyItems: start/center`) vs stretched columns. ~150 fixtures.
+
 ---
 
 ## Prior Art
@@ -413,6 +419,16 @@ A script that runs `npm pack`, installs the tarball into a temp directory, impor
 - [x] Fitness metric extended to cover grid tiers (same runner; grid tiers are ordinary tiers)
 
 Out of scope for v-grid-1 (documented in CLAUDE.md Known gaps and the README): percentage tracks, named lines/`grid-template-areas`, subgrid, masonry, grid baseline alignment, `order` in auto-placement, grid-line-based absolute positioning.
+
+### Phase 4 (Text) — Complete (2026-07-05)
+
+- [x] Width-dependent text via the `measureContent` contract, driven by captured word widths + greedy line breaking (fixtures are a pure function of Chromium-measured data, so a failing fixture indicts layout math, not text measurement).
+- [x] Grid row contributions measured at the resolved column width (reordered `processNode` grid branch; constant-content items unaffected).
+- [x] Flex text at the resolved main size in both directions, including the column min-height:auto floor (wrapped height at the used inline size) and the row min-width:auto floor (widest word) feeding line breaking.
+- [x] New tiers 26 (text in flex) and 27 (text in grid).
+- [x] Documented Pretext adapter (browser/worker only; `prepare()` needs a canvas) and README "Text" section.
+
+Deferred (documented in CLAUDE.md Known gaps): width-dependent text one level deep — a text leaf inside a *nested* flex/grid container over-wraps because `computeIntrinsicContentSize` measures it at unconstrained intrinsic width, not the item's resolved width. Needs a degenerate-layout pass rather than a contribution reorder. Constant-size content nests correctly.
 
 ---
 
