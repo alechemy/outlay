@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nested Dashboard — constraint-layout-algo</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      :root {
+        color-scheme: light;
+        --page: #f5f1ea;
+        --panel: #fffdf8;
+        --ink: #201b18;
+        --muted: #6d645d;
+        --rule: #d8cec3;
+        --accent: #955f3b;
+        --accent-light: #c4865e;
+        --selected: #f0e4d6;
+        --ok: #2e7d32;
+        --bad: #c0392b;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(180deg, #fbf7f0 0%, var(--page) 100%);
+        color: var(--ink);
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+      .page {
+        width: min(1120px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+      a.back {
+        font:
+          12px/1.2 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a.back:hover {
+        text-decoration: underline;
+      }
+      .eyebrow {
+        margin: 12px 0 6px;
+        font:
+          12px/1.2 "SF Mono",
+          ui-monospace,
+          monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      h1 {
+        margin: 0;
+        font:
+          700 30px/1.08 Georgia,
+          "Times New Roman",
+          serif;
+      }
+      .intro {
+        margin: 10px 0 0;
+        max-width: 74ch;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .intro code {
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        padding: 0 4px;
+        font:
+          12px/1.4 "SF Mono",
+          ui-monospace,
+          monospace;
+      }
+      .toolbar {
+        margin-top: 20px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--panel);
+      }
+      .seg button {
+        font:
+          500 12px/1 "SF Mono",
+          ui-monospace,
+          monospace;
+        border: none;
+        border-right: 1px solid var(--rule);
+        background: transparent;
+        color: var(--ink);
+        padding: 8px 13px;
+        cursor: pointer;
+      }
+      .seg button:last-child {
+        border-right: none;
+      }
+      .seg button.active {
+        background: var(--accent);
+        color: #fff;
+      }
+      .timing {
+        font:
+          11px/1.4 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--muted);
+      }
+      .timing strong {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .match {
+        font:
+          11px/1.4 "SF Mono",
+          ui-monospace,
+          monospace;
+        margin-left: auto;
+      }
+      .match.ok {
+        color: var(--ok);
+      }
+      .match.bad {
+        color: var(--bad);
+      }
+
+      .stage {
+        position: relative;
+        margin-top: 18px;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid var(--rule);
+        box-shadow: 0 18px 40px rgb(54 40 23 / 0.1);
+      }
+      .render-root {
+        position: absolute;
+        top: 0;
+        left: 0;
+        background: var(--panel);
+      }
+      #solver-root .d-box {
+        position: absolute;
+        border-color: transparent;
+        overflow: hidden;
+      }
+      .d-css-box {
+        border-color: transparent;
+      }
+
+      /* Shared visual treatments (no layout — layout is per render mode). */
+      .k-header {
+        background: var(--panel);
+        border-color: var(--rule);
+      }
+      .k-logo {
+        background: var(--accent);
+        border-radius: 6px;
+      }
+      .k-brand-text {
+        color: var(--ink);
+        font:
+          600 15px/1 "Helvetica Neue",
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+      .k-pill {
+        background: var(--selected);
+        border-radius: 999px;
+        color: var(--accent);
+        font:
+          600 11px/1 "SF Mono",
+          ui-monospace,
+          monospace;
+        justify-content: center;
+      }
+      .k-sidebar {
+        background: color-mix(in srgb, var(--panel) 82%, #efe4d5 18%);
+        border-color: var(--rule);
+      }
+      .k-navitem {
+        color: var(--muted);
+        border-radius: 7px;
+      }
+      .k-navitem-active {
+        background: var(--selected);
+        color: var(--ink);
+        border-radius: 7px;
+      }
+      .k-navicon {
+        background: var(--accent-light);
+        border-radius: 4px;
+        opacity: 0.85;
+      }
+      .k-navlabel {
+        color: inherit;
+        font:
+          500 12px/1 "Helvetica Neue",
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+      .k-title {
+        color: var(--ink);
+        font:
+          600 16px/1 "Helvetica Neue",
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+      .k-card {
+        background: var(--panel);
+        border-color: var(--rule);
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgb(54 40 23 / 0.06);
+      }
+      .k-card-label {
+        color: var(--muted);
+        font:
+          600 10px/1 "SF Mono",
+          ui-monospace,
+          monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .k-card-dot {
+        border-radius: 999px;
+      }
+      .k-card-value {
+        color: var(--ink);
+        font:
+          700 26px/1 Georgia,
+          "Times New Roman",
+          serif;
+      }
+      .k-bar {
+        border-radius: 3px 3px 0 0;
+      }
+      .k-card-delta {
+        font:
+          600 12px/1 "SF Mono",
+          ui-monospace,
+          monospace;
+      }
+
+      /* Text leaves are flex-centered so single-line text sits vertically
+         centered in both render modes. */
+      .d-text {
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+      }
+      .d-text.center {
+        justify-content: center;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <a class="back" href="/demos/index.html">← all demos</a>
+      <p class="eyebrow">constraint-layout-algo</p>
+      <h1>Nested Dashboard</h1>
+      <p class="intro">
+        A real UI — header, sidebar, and a responsive
+        <code>display: grid</code> card area, each card its own nested flex
+        layout — laid out entirely by <code>solveLayout</code> and drawn with
+        absolutely-positioned <code>div</code>s. Resize the window and the solver
+        re-runs over the whole tree. Flip to <em>CSS layout</em> to render the
+        exact same tree with native flex and grid: the badge measures both and
+        confirms they land in the same place.
+      </p>
+
+      <div class="toolbar">
+        <div class="seg" id="mode">
+          <button data-mode="solver" class="active">Solver layout</button>
+          <button data-mode="css">CSS layout</button>
+        </div>
+        <span class="timing" id="timing"></span>
+        <span class="match" id="match"></span>
+      </div>
+
+      <div class="stage" id="stage">
+        <div class="render-root" id="css-root"></div>
+        <div class="render-root" id="solver-root"></div>
+      </div>
+    </main>
+
+    <script type="module" src="./dashboard.ts"></script>
+  </body>
+</html>
