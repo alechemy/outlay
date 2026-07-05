@@ -302,6 +302,20 @@ Tests are organized into numbered tiers of increasing difficulty. All unlocked t
 
 **Tier 17: Block containers in flex trees** — `display: block` containers with block/flex children nested as flex items, exercising the block layout path in a non-root position. Definite-size, zero-vertical-margin boxes isolate it from margin collapse (a non-goal). ~75 fixtures.
 
+**Tier 18: Grid fixed tracks** — px-only templates (incl. fixed-count `repeat`), explicit line placement with spans via end lines, gap, auto-height containers, box-sizing variety. ~150 fixtures.
+
+**Tier 19: Grid fr sizing** — free-space distribution across `fr` tracks with content-based minimums (clamp-and-redistribute), fractional factors, fr rows under definite and indefinite heights. ~150 fixtures.
+
+**Tier 20: Grid intrinsic tracks** — `auto`, `minmax()`, and `min-content`/`max-content` tracks: base/growth-limit sizing, the maximize step, equal stretch of auto tracks. ~150 fixtures.
+
+**Tier 21: Grid spans and auto-placement** — `span n`, sparse auto-placement in row/column flow, row-locked items, implicit tracks via `gridAutoRows`/`gridAutoColumns`, span contribution distribution (incl. the flex-track and infinitely-growable rules). ~150 fixtures.
+
+**Tier 22: Grid alignment and dense packing** — `justifyItems`/`justifySelf`, grid `alignItems`/`alignSelf`, `justifyContent`/`alignContent` content distribution with safe fallbacks, dense auto-flow, auto margins (reported as 0 per Chromium). ~150 fixtures.
+
+**Tier 23: Mixed grid/flex trees** — grid inside flex, flex inside grid, nested grids; grid intrinsic sizing feeding flex bases and min-content floors (fr equalization differs between max-content and min-content width constraints). ~150 fixtures.
+
+**Tier 24: Grid auto-repeat** — `repeat(auto-fill)` / `repeat(auto-fit)` with px and `minmax(px, 1fr)` tracks, fixed tracks around the repeat, auto-fill rows, auto-fit empty-track collapse (including gap collapse) observed via content distribution. ~120 fixtures.
+
 ---
 
 ## Prior Art
@@ -390,13 +404,15 @@ A script that runs `npm pack`, installs the tarball into a temp directory, impor
 - **Multi-browser baselines** — Chromium-only is correct per the ground truth hierarchy.
 - **CI/CD pipeline** — can be added after the initial publish.
 
-### Phase 3 (Grid) — Post-v1
+### Phase 3 (Grid) — Complete (2026-07-05)
 
-- [ ] CSS Grid track sizing algorithm (explicit grid)
-- [ ] Grid item placement (explicit and auto-placement)
-- [ ] Mixed flex + grid trees
-- [ ] New tiers 18+ covering grid-specific test cases (13-17 were taken by gap, min/max-height, baseline, keyword sizing, and block-in-flex coverage)
-- [ ] Fitness metric extended to cover grid tiers
+- [x] CSS Grid track sizing algorithm (explicit grid, fr, minmax, keywords, auto-repeat)
+- [x] Grid item placement (explicit, spans, sparse and dense auto-placement, implicit tracks)
+- [x] Mixed flex + grid trees (including grid intrinsic sizing)
+- [x] New tiers 18-24 covering grid-specific test cases (13-17 were taken by gap, min/max-height, baseline, keyword sizing, and block-in-flex coverage)
+- [x] Fitness metric extended to cover grid tiers (same runner; grid tiers are ordinary tiers)
+
+Out of scope for v-grid-1 (documented in CLAUDE.md Known gaps and the README): percentage tracks, named lines/`grid-template-areas`, subgrid, masonry, grid baseline alignment, `order` in auto-placement, grid-line-based absolute positioning.
 
 ---
 

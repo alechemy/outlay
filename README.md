@@ -1,6 +1,6 @@
 # constraint-layout-algo
 
-Off-DOM CSS layout solver. Computes Flexbox positions and sizes without a browser. The layout equivalent of what [Pretext](https://github.com/chenglou/pretext) does for text measurement: extracting a DOM-dependent computation into standalone arithmetic.
+Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes without a browser. The layout equivalent of what [Pretext](https://github.com/chenglou/pretext) does for text measurement: extracting a DOM-dependent computation into standalone arithmetic.
 
 ## Installation
 
@@ -170,8 +170,19 @@ const textNode = {
 - `position: absolute` and `position: fixed`
 - `margin: auto` centering (both axes)
 - `display: none`
-- `order` property
+- `order` property (flex)
 - `content-box` and `border-box` sizing
+
+CSS Grid (`display: "grid"`):
+
+- Track sizing: fixed px, `fr` (content-based minimums), `auto`, `minmax()`, `min-content` / `max-content`, `repeat` (fixed-count, `auto-fill`, and `auto-fit` with empty-track collapse)
+- Placement: explicit lines (positive and negative), `span n`, sparse auto-placement (`row` and `column` flow), `dense` packing
+- Implicit tracks via `gridAutoRows` / `gridAutoColumns`
+- `gap` (single value and `{ row, column }`)
+- Alignment: `justifyItems` / `justifySelf`, `alignItems` / `alignSelf` (flex vocabulary; `flex-start`/`flex-end` behave as `start`/`end`), `justifyContent` / `alignContent` distribution, auto margins
+- Grid and flex compose: grid inside flex, flex inside grid, nested grids, including intrinsic sizing of nested grids
+
+Grid exclusions (v1): no percentage tracks (caller resolves them), no named lines or `grid-template-areas` (caller resolves to line numbers), no subgrid, no masonry, no grid baseline alignment.
 
 ## Non-goals
 
@@ -179,12 +190,11 @@ const textNode = {
 - No rendering or painting -- output is a position/size map
 - No inline layout or line breaking (use Pretext for text)
 - No floats, no table layout
-- No CSS Grid (yet)
 - No block-flow margin collapsing, and no auto-height for `display: block` containers (give block containers a definite height)
 
 ## Accuracy
 
-1900 fixtures across 17 tiers, all passing at 100%. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
+2920 fixtures across 24 tiers, all passing at 100%. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
 
 ## Performance
 

@@ -4,10 +4,10 @@
 
 As of 2026-07-05:
 
-- **Solver**: Tiers 1–17 fully passing (100%, 1900/1900). Tier 13 covers `gap`; Tier 14 locks `minHeight`/`maxHeight` on both axes; Tier 15 locks `align-items`/`align-self: baseline` (row and column direction, wrap and wrap-reverse per-line groups, nested-container baselines, mixed `alignSelf`); Tier 16 locks `min-content`/`max-content` on container heights and on flex items (resolved to concrete intrinsic sizes via `resolveKeywordSizes` before layout); Tier 17 locks `display: block` containers with children nested as flex items (the block layout path in a non-root position). **The pass rate only covers properties the generator emits** — see Known gaps below before trusting a "complete" claim.
+- **Solver**: Tiers 1–24 fully passing (100%, 2920/2920). Tiers 1–17 are flexbox/block/positioning (tier 13 `gap`, 14 min/max-height, 15 baseline, 16 keyword sizing, 17 block-in-flex). Tiers 18–24 are CSS Grid: 18 fixed tracks + explicit placement (incl. fixed-count `repeat`), 19 `fr` sizing with content-based minimums, 20 intrinsic tracks (`auto`, `minmax()`, keyword tracks), 21 spans + sparse auto-placement + implicit tracks, 22 alignment (`justifyItems`/`justifySelf`, grid `alignItems`/`alignSelf`, `justifyContent`/`alignContent` distribution, dense packing, auto margins), 23 mixed trees (grid⊂flex, flex⊂grid, grid⊂grid, grid intrinsic sizing), 24 `repeat(auto-fill/auto-fit)` incl. `minmax(px, 1fr)` and empty-track collapse. **The pass rate only covers properties the generator emits** — see Known gaps below before trusting a "complete" claim.
 - **Packaging**: v1 build, smoke test, and README exist, but the package is **not published to npm** (naming is an open question in PROJECT.md). The README's install instructions describe the post-publish state.
-- **Demos**: only the Layout Explorer is built (`pages/demos/explorer.html`, verified working). `DEMOS_PROMPT.md` specifies the remaining five demos.
-- **Phase 3 (CSS Grid)**: unstarted. `src/types.ts` declares grid properties, but the solver and the fixture generator have no grid support.
+- **Demos**: only the Layout Explorer is built (`pages/demos/explorer.html`, verified working; flex controls only — no grid controls yet). `DEMOS_PROMPT.md` specifies the remaining five demos.
+- **Phase 3 (CSS Grid)**: core complete (tiers 18–23). Grid module is `src/grid.ts` (placement, track sizing, alignment math); `src/solver.ts` integrates it in `processNode`/`emitBoxes` and `computeIntrinsicContentSize`.
 
 Performance targets are all met:
 
@@ -17,9 +17,20 @@ Performance targets are all met:
 
 Run `npm run bench` to check performance. All other infrastructure (fixture runner, generator, regression lock, probe) is built.
 
-### Known gaps and non-goals (verified 2026-07-05, post keyword-sizing / block-in-flex work)
+### Known gaps and non-goals (verified 2026-07-05, post grid tiers 18–23)
 
-Documented **non-goals** (deliberately not implemented; the generator avoids them, so no fixture asserts them):
+Grid non-goals for v-grid-1 (deliberately excluded; the generator never emits them):
+
+- **Percentage tracks and sizes** — caller-resolvable against a definite container, consistent with the rest of the vocabulary (no percentages anywhere in `LayoutNode`).
+- **Named lines and `grid-template-areas`** — statically resolvable to line numbers by the caller.
+- **Subgrid and masonry** — Taffy lacks both as well; explicitly out of scope.
+- **Grid baseline alignment** — `alignItems`/`alignSelf: baseline` in a grid container is treated as `start`; never generated.
+- **`alignContent: space-evenly`** — absent from the shared alignContent union (flex lacks it too).
+- **Implicit tracks before the explicit grid** — negative lines resolve within the explicit grid only; placements that would create leading implicit tracks are never generated.
+- **Absolutely-positioned grid children** — positioned against the grid container's padding box like any other container; grid-line-based inset resolution for absolute children is not implemented and not generated.
+- **`order` in grid auto-placement** — items place in document order; `order` is only generated for flex.
+
+Flex/block non-goals (deliberately not implemented; the generator avoids them, so no fixture asserts them):
 
 - **Block margin collapse.** Inside a flex item's block subtree Chromium collapses adjacent sibling vertical margins (parent/child collapse is suppressed because a flex item is a BFC root). The solver sums margins instead. Tier 17 sidesteps this by giving every block-flow box zero vertical margins.
 - **Block auto-height.** The solver never sizes a `display: block` container to fit its children; a block container with `height: auto` resolves to content-height 0. Block containers must carry a definite height (Tier 1 and Tier 17 both do).
