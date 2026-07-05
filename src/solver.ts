@@ -1484,78 +1484,6 @@ export function solveLayout(
         rowTrackList.push(node.gridAutoRows ?? "auto");
       }
 
-      // Item intrinsic contributions (outer sizes incl. margins), per axis
-      const colItems: TrackItemContribution[] = [];
-      const rowItems: TrackItemContribution[] = [];
-      for (const child of gridItems) {
-        const p = placements.get(child.id)!;
-        const cm = boxModelMap.get(child.id)!;
-        const hPBM =
-          cm.paddingLeft +
-          cm.paddingRight +
-          cm.borderLeft +
-          cm.borderRight +
-          cm.marginLeft +
-          cm.marginRight;
-        const vPBM =
-          cm.paddingTop +
-          cm.paddingBottom +
-          cm.borderTop +
-          cm.borderBottom +
-          cm.marginTop +
-          cm.marginBottom;
-        const definiteW = typeof child.width === "number";
-        const minW = definiteW
-          ? cm.contentWidth
-          : computeIntrinsicContentSize(
-              child,
-              "width",
-              nodeMap,
-              boxModelMap,
-              "min-content",
-            );
-        const maxW = definiteW
-          ? cm.contentWidth
-          : computeIntrinsicContentSize(
-              child,
-              "width",
-              nodeMap,
-              boxModelMap,
-              "max-content",
-            );
-        colItems.push({
-          start: p.colStart,
-          end: p.colEnd,
-          min: minW + hPBM,
-          max: maxW + hPBM,
-        });
-        const definiteH = typeof child.height === "number";
-        const minH = definiteH
-          ? cm.contentHeight
-          : computeIntrinsicContentSize(
-              child,
-              "height",
-              nodeMap,
-              boxModelMap,
-              "min-content",
-            );
-        const maxH = definiteH
-          ? cm.contentHeight
-          : computeIntrinsicContentSize(
-              child,
-              "height",
-              nodeMap,
-              boxModelMap,
-              "max-content",
-            );
-        rowItems.push({
-          start: p.rowStart,
-          end: p.rowEnd,
-          min: minH + vPBM,
-          max: maxH + vPBM,
-        });
-      }
-
       let collapsedCols: boolean[] | undefined;
       if (colExpansion.autoFitEnd > colExpansion.autoFitStart) {
         collapsedCols = new Array<boolean>(colCount).fill(false);
@@ -1589,6 +1517,45 @@ export function solveLayout(
         }
       }
 
+      // Column contributions (outer widths incl. margins).
+      const colItems: TrackItemContribution[] = [];
+      for (const child of gridItems) {
+        const p = placements.get(child.id)!;
+        const cm = boxModelMap.get(child.id)!;
+        const hPBM =
+          cm.paddingLeft +
+          cm.paddingRight +
+          cm.borderLeft +
+          cm.borderRight +
+          cm.marginLeft +
+          cm.marginRight;
+        const definiteW = typeof child.width === "number";
+        const minW = definiteW
+          ? cm.contentWidth
+          : computeIntrinsicContentSize(
+              child,
+              "width",
+              nodeMap,
+              boxModelMap,
+              "min-content",
+            );
+        const maxW = definiteW
+          ? cm.contentWidth
+          : computeIntrinsicContentSize(
+              child,
+              "width",
+              nodeMap,
+              boxModelMap,
+              "max-content",
+            );
+        colItems.push({
+          start: p.colStart,
+          end: p.colEnd,
+          min: minW + hPBM,
+          max: maxW + hPBM,
+        });
+      }
+
       const colSizes = resolveTrackSizes(
         colTrackList,
         colCount,
@@ -1599,6 +1566,112 @@ export function solveLayout(
         true,
         collapsedCols,
       );
+      const colOffsets = trackOffsets(
+        colSizes,
+        colGap,
+        widthDefinite ? model.contentWidth : undefined,
+        node.justifyContent,
+        collapsedCols,
+      );
+
+      // Resolve item widths before row contributions so width-dependent
+      // content (text) reports its wrapped height at the used inline size.
+      for (const child of gridItems) {
+        const p = placements.get(child.id)!;
+        const cm = boxModelMap.get(child.id)!;
+        if (typeof child.width === "number") continue;
+        const areaWidth =
+          colOffsets[p.colEnd - 1] +
+          colSizes[p.colEnd - 1] -
+          colOffsets[p.colStart];
+        const hPB =
+          cm.paddingLeft + cm.paddingRight + cm.borderLeft + cm.borderRight;
+        const canStretch =
+          gridItemJustify(child, node) === "stretch" &&
+          child.margin.left !== "auto" &&
+          child.margin.right !== "auto";
+        let content: number;
+        if (canStretch) {
+          content = Math.max(0, areaWidth - cm.marginLeft - cm.marginRight - hPB);
+        } else {
+          const maxContent = computeIntrinsicContentSize(
+            child,
+            "width",
+            nodeMap,
+            boxModelMap,
+            "max-content",
+          );
+          if (child.measureContent && child.children.length === 0) {
+            // fit-content: shrink to the area when the content overflows it,
+            // never below the widest unbreakable piece (min-content).
+            const minContent = computeIntrinsicContentSize(
+              child,
+              "width",
+              nodeMap,
+              boxModelMap,
+              "min-content",
+            );
+            const avail = Math.max(
+              0,
+              areaWidth - cm.marginLeft - cm.marginRight - hPB,
+            );
+            content = Math.min(maxContent, Math.max(minContent, avail));
+          } else {
+            content = maxContent;
+          }
+        }
+        cm.contentWidth = clampCrossContent(child, content, hPB, false);
+        let dims = parentResolvedDims.get(child.id);
+        if (!dims) {
+          dims = new Set();
+          parentResolvedDims.set(child.id, dims);
+        }
+        dims.add("width");
+      }
+
+      // Row contributions (outer heights incl. margins), measured at the
+      // resolved inline size for width-dependent content.
+      const rowItems: TrackItemContribution[] = [];
+      for (const child of gridItems) {
+        const p = placements.get(child.id)!;
+        const cm = boxModelMap.get(child.id)!;
+        const vPBM =
+          cm.paddingTop +
+          cm.paddingBottom +
+          cm.borderTop +
+          cm.borderBottom +
+          cm.marginTop +
+          cm.marginBottom;
+        let minH: number;
+        let maxH: number;
+        if (typeof child.height === "number") {
+          minH = maxH = cm.contentHeight;
+        } else if (child.measureContent && child.children.length === 0) {
+          minH = maxH = child.measureContent(cm.contentWidth).height;
+        } else {
+          minH = computeIntrinsicContentSize(
+            child,
+            "height",
+            nodeMap,
+            boxModelMap,
+            "min-content",
+          );
+          maxH = computeIntrinsicContentSize(
+            child,
+            "height",
+            nodeMap,
+            boxModelMap,
+            "max-content",
+          );
+        }
+        rowItems.push({
+          start: p.rowStart,
+          end: p.rowEnd,
+          min: minH + vPBM,
+          max: maxH + vPBM,
+        });
+      }
+
       const rowSizes = resolveTrackSizes(
         rowTrackList,
         rowCount,
@@ -1630,13 +1703,6 @@ export function solveLayout(
         );
       }
 
-      const colOffsets = trackOffsets(
-        colSizes,
-        colGap,
-        widthDefinite ? model.contentWidth : undefined,
-        node.justifyContent,
-        collapsedCols,
-      );
       const rowOffsets = trackOffsets(
         rowSizes,
         rowGap,
@@ -1655,57 +1721,38 @@ export function solveLayout(
       for (const child of gridItems) {
         const p = placements.get(child.id)!;
         const cm = boxModelMap.get(child.id)!;
-        const areaWidth =
-          colOffsets[p.colEnd - 1] +
-          colSizes[p.colEnd - 1] -
-          colOffsets[p.colStart];
+        if (typeof child.height === "number") continue;
         const areaHeight =
           rowOffsets[p.rowEnd - 1] +
           rowSizes[p.rowEnd - 1] -
           rowOffsets[p.rowStart];
-        const hPB =
-          cm.paddingLeft + cm.paddingRight + cm.borderLeft + cm.borderRight;
         const vPB =
           cm.paddingTop + cm.paddingBottom + cm.borderTop + cm.borderBottom;
+        const canStretch =
+          gridItemAlign(child, node) === "stretch" &&
+          child.margin.top !== "auto" &&
+          child.margin.bottom !== "auto";
+        let content: number;
+        if (canStretch) {
+          content = Math.max(0, areaHeight - cm.marginTop - cm.marginBottom - vPB);
+        } else if (child.measureContent && child.children.length === 0) {
+          content = child.measureContent(cm.contentWidth).height;
+        } else {
+          content = computeIntrinsicContentSize(
+            child,
+            "height",
+            nodeMap,
+            boxModelMap,
+            "max-content",
+          );
+        }
+        cm.contentHeight = clampCrossContent(child, content, vPB, true);
         let dims = parentResolvedDims.get(child.id);
         if (!dims) {
           dims = new Set();
           parentResolvedDims.set(child.id, dims);
         }
-        if (typeof child.width !== "number") {
-          const canStretch =
-            gridItemJustify(child, node) === "stretch" &&
-            child.margin.left !== "auto" &&
-            child.margin.right !== "auto";
-          const content = canStretch
-            ? Math.max(0, areaWidth - cm.marginLeft - cm.marginRight - hPB)
-            : computeIntrinsicContentSize(
-                child,
-                "width",
-                nodeMap,
-                boxModelMap,
-                "max-content",
-              );
-          cm.contentWidth = clampCrossContent(child, content, hPB, false);
-          dims.add("width");
-        }
-        if (typeof child.height !== "number") {
-          const canStretch =
-            gridItemAlign(child, node) === "stretch" &&
-            child.margin.top !== "auto" &&
-            child.margin.bottom !== "auto";
-          const content = canStretch
-            ? Math.max(0, areaHeight - cm.marginTop - cm.marginBottom - vPB)
-            : computeIntrinsicContentSize(
-                child,
-                "height",
-                nodeMap,
-                boxModelMap,
-                "max-content",
-              );
-          cm.contentHeight = clampCrossContent(child, content, vPB, true);
-          dims.add("height");
-        }
+        dims.add("height");
       }
     }
 
