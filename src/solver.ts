@@ -14,6 +14,7 @@ import {
 } from "./types.js";
 import {
     GridLayoutInfo,
+    TrackItemContribution,
     expandTrackList,
     gridAreaSize,
     resolvePlacements,
@@ -1345,92 +1346,93 @@ export function solveLayout(
           child.display !== "none" && pos !== "absolute" && pos !== "fixed"
         );
       });
+      const flow = node.gridAutoFlow?.startsWith("column") ? "column" : "row";
       const { placements, colCount, rowCount } = resolvePlacements(
         gridItems,
         colTracks.length,
         rowTracks.length,
+        flow,
       );
 
-      // Intrinsic contributions of span-1 items, per track (outer size incl. margins)
-      const colMinContributions = new Array<number>(colCount).fill(0);
-      const colMaxContributions = new Array<number>(colCount).fill(0);
-      const rowMinContributions = new Array<number>(rowCount).fill(0);
-      const rowMaxContributions = new Array<number>(rowCount).fill(0);
+      const colTrackList = colTracks.slice();
+      while (colTrackList.length < colCount) {
+        colTrackList.push(node.gridAutoColumns ?? "auto");
+      }
+      const rowTrackList = rowTracks.slice();
+      while (rowTrackList.length < rowCount) {
+        rowTrackList.push(node.gridAutoRows ?? "auto");
+      }
+
+      // Item intrinsic contributions (outer sizes incl. margins), per axis
+      const colItems: TrackItemContribution[] = [];
+      const rowItems: TrackItemContribution[] = [];
       for (const child of gridItems) {
         const p = placements.get(child.id)!;
         const cm = boxModelMap.get(child.id)!;
-        if (p.colEnd - p.colStart === 1) {
-          const hPBM =
-            cm.paddingLeft +
-            cm.paddingRight +
-            cm.borderLeft +
-            cm.borderRight +
-            cm.marginLeft +
-            cm.marginRight;
-          const definite = typeof child.width === "number";
-          const minW = definite
-            ? cm.contentWidth
-            : computeIntrinsicContentSize(
-                child,
-                "width",
-                nodeMap,
-                boxModelMap,
-                "min-content",
-              );
-          const maxW = definite
-            ? cm.contentWidth
-            : computeIntrinsicContentSize(
-                child,
-                "width",
-                nodeMap,
-                boxModelMap,
-                "max-content",
-              );
-          colMinContributions[p.colStart] = Math.max(
-            colMinContributions[p.colStart],
-            minW + hPBM,
-          );
-          colMaxContributions[p.colStart] = Math.max(
-            colMaxContributions[p.colStart],
-            maxW + hPBM,
-          );
-        }
-        if (p.rowEnd - p.rowStart === 1) {
-          const vPBM =
-            cm.paddingTop +
-            cm.paddingBottom +
-            cm.borderTop +
-            cm.borderBottom +
-            cm.marginTop +
-            cm.marginBottom;
-          const definite = typeof child.height === "number";
-          const minH = definite
-            ? cm.contentHeight
-            : computeIntrinsicContentSize(
-                child,
-                "height",
-                nodeMap,
-                boxModelMap,
-                "min-content",
-              );
-          const maxH = definite
-            ? cm.contentHeight
-            : computeIntrinsicContentSize(
-                child,
-                "height",
-                nodeMap,
-                boxModelMap,
-                "max-content",
-              );
-          rowMinContributions[p.rowStart] = Math.max(
-            rowMinContributions[p.rowStart],
-            minH + vPBM,
-          );
-          rowMaxContributions[p.rowStart] = Math.max(
-            rowMaxContributions[p.rowStart],
-            maxH + vPBM,
-          );
-        }
+        const hPBM =
+          cm.paddingLeft +
+          cm.paddingRight +
+          cm.borderLeft +
+          cm.borderRight +
+          cm.marginLeft +
+          cm.marginRight;
+        const vPBM =
+          cm.paddingTop +
+          cm.paddingBottom +
+          cm.borderTop +
+          cm.borderBottom +
+          cm.marginTop +
+          cm.marginBottom;
+        const definiteW = typeof child.width === "number";
+        const minW = definiteW
+          ? cm.contentWidth
+          : computeIntrinsicContentSize(
+              child,
+              "width",
+              nodeMap,
+              boxModelMap,
+              "min-content",
+            );
+        const maxW = definiteW
+          ? cm.contentWidth
+          : computeIntrinsicContentSize(
+              child,
+              "width",
+              nodeMap,
+              boxModelMap,
+              "max-content",
+            );
+        colItems.push({
+          start: p.colStart,
+          end: p.colEnd,
+          min: minW + hPBM,
+          max: maxW + hPBM,
+        });
+        const definiteH = typeof child.height === "number";
+        const minH = definiteH
+          ? cm.contentHeight
+          : computeIntrinsicContentSize(
+              child,
+              "height",
+              nodeMap,
+              boxModelMap,
+              "min-content",
+            );
+        const maxH = definiteH
+          ? cm.contentHeight
+          : computeIntrinsicContentSize(
+              child,
+              "height",
+              nodeMap,
+              boxModelMap,
+              "max-content",
+            );
+        rowItems.push({
+          start: p.rowStart,
+          end: p.rowEnd,
+          min: minH + vPBM,
+          max: maxH + vPBM,
+        });
       }
 
       const resolvedDims = parentResolvedDims.get(node.id);
@@ -1440,20 +1442,18 @@ export function solveLayout(
         typeof node.height === "number" || resolvedDims?.has("height") === true;
 
       const colSizes = resolveTrackSizes(
-        colTracks,
+        colTrackList,
         colCount,
         colGap,
         widthDefinite ? model.contentWidth : undefined,
-        colMinContributions,
-        colMaxContributions,
+        colItems,
       );
       const rowSizes = resolveTrackSizes(
-        rowTracks,
+        rowTrackList,
         rowCount,
         rowGap,
         heightDefinite ? model.contentHeight : undefined,
-        rowMinContributions,
-        rowMaxContributions,
+        rowItems,
       );
 
       if (!heightDefinite) {
