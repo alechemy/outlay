@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Virtual Scroll — constraint-layout-algo</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      :root {
+        color-scheme: light;
+        --page: #f5f1ea;
+        --panel: #fffdf8;
+        --ink: #201b18;
+        --muted: #6d645d;
+        --rule: #d8cec3;
+        --accent: #955f3b;
+        --accent-light: #c4865e;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(180deg, #fbf7f0 0%, var(--page) 100%);
+        color: var(--ink);
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+      .page {
+        width: min(820px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+      a.back {
+        font:
+          12px/1.2 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a.back:hover {
+        text-decoration: underline;
+      }
+      .eyebrow {
+        margin: 12px 0 6px;
+        font:
+          12px/1.2 "SF Mono",
+          ui-monospace,
+          monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      h1 {
+        margin: 0;
+        font:
+          700 30px/1.08 Georgia,
+          "Times New Roman",
+          serif;
+      }
+      .intro {
+        margin: 10px 0 0;
+        max-width: 66ch;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .intro code {
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        padding: 0 4px;
+        font:
+          12px/1.4 "SF Mono",
+          ui-monospace,
+          monospace;
+      }
+
+      .stats {
+        margin-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 12px;
+      }
+      .stat {
+        font:
+          11px/1.3 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--muted);
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        padding: 8px 11px;
+      }
+      .stat b {
+        display: block;
+        margin-top: 3px;
+        font-size: 15px;
+        color: var(--accent);
+      }
+
+      .scroller {
+        margin-top: 18px;
+        height: 560px;
+        overflow-y: auto;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: var(--panel);
+        box-shadow: 0 18px 40px rgb(54 40 23 / 0.08);
+        scrollbar-gutter: stable;
+      }
+      .canvas {
+        position: relative;
+        width: 100%;
+      }
+      .v-row {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        padding: 14px 22px;
+        border-bottom: 1px solid var(--rule);
+        overflow: hidden;
+      }
+      .v-idx {
+        position: absolute;
+        top: 8px;
+        right: 12px;
+        font:
+          10px/1 "SF Mono",
+          ui-monospace,
+          monospace;
+        color: var(--accent-light);
+        pointer-events: none;
+      }
+      .v-body {
+        font: 15px/22px Arial, sans-serif;
+        color: var(--ink);
+        overflow-wrap: anywhere;
+        white-space: normal;
+      }
+      .v-row:nth-child(even) {
+        background: color-mix(in srgb, var(--panel) 80%, #f0e6d8 20%);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <a class="back" href="/demos/index.html">← all demos</a>
+      <p class="eyebrow">constraint-layout-algo</p>
+      <h1>Virtual Scroll</h1>
+      <p class="intro">
+        Ten thousand rows of wrapped text, every row a different height. The
+        solver runs <code>solveLayout</code> once over the whole list — heights
+        come from <code>@chenglou/pretext</code> through a
+        <code>measureContent</code> adapter — so every position is known before
+        the first paint. Only the rows in view are ever in the DOM, and because
+        the geometry is exact there are no height estimates and no scroll-jump
+        corrections.
+      </p>
+
+      <div class="stats" id="stats"></div>
+      <div class="scroller" id="scroller">
+        <div class="canvas" id="canvas"></div>
+      </div>
+    </main>
+
+    <script type="module" src="./virtual-scroll.ts"></script>
+  </body>
+</html>
