@@ -1,5 +1,5 @@
-import type { LayoutNode } from "constraint-layout-algo";
-import { solveLayout } from "constraint-layout-algo";
+import type { LayoutNode } from "outlay";
+import { solveLayout } from "outlay";
 import { colorAt } from "./palette";
 
 const COLS = 4;

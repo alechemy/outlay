@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Layout assertions in component tests, powered by constraint-layout-algo",
+  "description": "Layout assertions in component tests, powered by outlay",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"

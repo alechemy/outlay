@@ -1,5 +1,5 @@
-import type { LayoutNode, ResolvedBox } from "constraint-layout-algo";
-import { solveLayout } from "constraint-layout-algo";
+import type { LayoutNode, ResolvedBox } from "outlay";
+import { solveLayout } from "outlay";
 import { makeTextMeasure } from "./pretext-adapter";
 
 const FONT = "16px Arial";

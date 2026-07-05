@@ -2,7 +2,7 @@
 
 ## Summary
 
-Build a JavaScript/WebAssembly library that answers the question "given these CSS constraints, what size and position will this element have?" without rendering anything in the browser. The library accepts a declarative description of a layout tree (container dimensions, display modes, child constraints) and outputs resolved box dimensions and positions using pure arithmetic.
+Build a JavaScript library that answers the question "given these CSS constraints, what size and position will this element have?" without rendering anything in the browser. The library accepts a declarative description of a layout tree (container dimensions, display modes, child constraints) and outputs resolved box dimensions and positions using pure arithmetic.
 
 This is the layout equivalent of what Pretext.js does for text measurement: extracting a historically DOM-dependent computation into a standalone, renderable-anywhere math layer.
 
@@ -422,6 +422,8 @@ A script that runs `npm pack`, installs the tarball into a temp directory, impor
 
 Out of scope for v-grid-1 (documented in CLAUDE.md Known gaps and the README): percentage tracks, named lines/`grid-template-areas`, subgrid, masonry, grid baseline alignment, `order` in auto-placement, grid-line-based absolute positioning.
 
+Chromium grid behaviors pinned by probe (Chrome 146, 2026-07-05): the `fr` minimum is content-based (`1fr` ≡ `minmax(auto, 1fr)`) with clamp-and-redistribute like the flex §9.7 loop; under default alignment, auto tracks absorb leftover free space equally on both axes, including implicit tracks in a definite-size container; `auto-fill` count = floor((available + gap) / (track + gap)); out-of-template placement creates implicit tracks sized by `gridAutoColumns`/`gridAutoRows`; `dense` backfills the earliest hole.
+
 ### Phase 4 (Text) — Complete (2026-07-05)
 
 - [x] Width-dependent text via the `measureContent` contract, driven by captured word widths + greedy line breaking (fixtures are a pure function of Chromium-measured data, so a failing fixture indicts layout math, not text measurement).
@@ -462,4 +464,4 @@ Solver issue surfaced while building it (see CLAUDE.md Known gaps): a **nested**
 
 ### Open
 
-1. **Package naming.** Decide on the npm package name before first publish. Current `package.json` says `constraint-layout-algo` — evaluate whether a scoped name or shorter name is preferable.
+1. **Package naming.** Resolved 2026-07-05: `outlay`, published from https://github.com/alechemy/outlay.

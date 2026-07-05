@@ -1,17 +1,17 @@
-# constraint-layout-algo
+# outlay
 
 Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes without a browser, verified against Chromium's own layout engine at 0.5px tolerance across 3,700 generated fixtures. The layout equivalent of what [Pretext](https://github.com/chenglou/pretext) does for text measurement: extracting a DOM-dependent computation into standalone arithmetic.
 
 ## Installation
 
 ```sh
-npm install constraint-layout-algo
+npm install outlay
 ```
 
 ## Quick example
 
 ```ts
-import { solveLayout } from "constraint-layout-algo";
+import { solveLayout } from "outlay";
 
 const root = {
   id: "root",
@@ -29,6 +29,10 @@ boxes.get("main"); // { x: 100, y: 0, width: 300, height: 200, ... }
 ```
 
 Only `id` is required per node. Everything else has sensible defaults.
+
+## Demos
+
+Live at [alechemy.github.io/outlay](https://alechemy.github.io/outlay/): a layout explorer that renders the solver next to real browser CSS with a live match badge, plus animated transitions, drag-and-drop reorder, virtual scrolling, text-driven layout, and a nested dashboard with a solver-vs-native toggle. Locally: `npm start`, then open `/demos/index.html`.
 
 ## Defaults
 

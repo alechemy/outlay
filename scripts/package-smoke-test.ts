@@ -54,7 +54,7 @@ async function smokeJavaScriptEsm(tarballPath: string): Promise<void> {
   await writeFile(
     path.join(projectDir, "index.js"),
     [
-      "import { solveLayout } from 'constraint-layout-algo';",
+      "import { solveLayout } from 'outlay';",
       "",
       "const root = {",
       "  id: 'root',",
@@ -141,8 +141,8 @@ async function smokeTypeScript(tarballPath: string): Promise<void> {
   await writeFile(
     path.join(projectDir, "index.ts"),
     [
-      "import { solveLayout } from 'constraint-layout-algo';",
-      "import type { LayoutNode, LayoutResult, ResolvedBox, BoxSides } from 'constraint-layout-algo';",
+      "import { solveLayout } from 'outlay';",
+      "import type { LayoutNode, LayoutResult, ResolvedBox, BoxSides } from 'outlay';",
       "",
       "const sides: BoxSides = { top: 0, right: 0, bottom: 0, left: 0 };",
       "const root: LayoutNode = {",

@@ -1,5 +1,5 @@
-import type { LayoutNode, ResolvedBox } from "constraint-layout-algo";
-import { solveLayout } from "constraint-layout-algo";
+import type { LayoutNode, ResolvedBox } from "outlay";
+import { solveLayout } from "outlay";
 import { colorAt } from "./palette";
 
 const STAGE_W = 660;
