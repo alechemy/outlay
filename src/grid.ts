@@ -95,17 +95,8 @@ export function resolvePlacements(
   return { placements, colCount, rowCount };
 }
 
-function trackFlexFactor(t: TrackSize | undefined): number | null {
-  if (typeof t === "string" && t.endsWith("fr")) return parseFloat(t);
-  if (
-    typeof t === "object" &&
-    t !== null &&
-    typeof t.max === "string" &&
-    t.max.endsWith("fr")
-  ) {
-    return parseFloat(t.max);
-  }
-  return null;
+function parseFr(v: unknown): number | null {
+  return typeof v === "string" && v.endsWith("fr") ? parseFloat(v) : null;
 }
 
 export function resolveTrackSizes(
@@ -113,79 +104,151 @@ export function resolveTrackSizes(
   count: number,
   gap: number,
   available: number | undefined,
-  contributions: number[],
+  minContributions: number[],
+  maxContributions: number[],
 ): number[] {
   const sizes: number[] = [];
-  const flexIndices: number[] = [];
-  const factors: number[] = [];
+  const limits: number[] = [];
+  const factors: (number | null)[] = [];
+  const stretchable: boolean[] = [];
+
   for (let i = 0; i < count; i++) {
-    const t = tracks[i];
-    const fr = trackFlexFactor(t);
+    const t = tracks[i] ?? "auto";
+    const minC = minContributions[i] ?? 0;
+    const maxC = maxContributions[i] ?? 0;
+    let min: number | "auto" | "min-content" | "max-content";
+    let max: number | "auto" | "min-content" | "max-content" | `${number}fr`;
     if (typeof t === "number") {
-      sizes.push(t);
-    } else {
-      sizes.push(contributions[i] ?? 0);
-      if (fr !== null) {
-        flexIndices.push(i);
-        factors.push(fr);
+      min = t;
+      max = t;
+    } else if (typeof t === "string") {
+      if (parseFr(t) !== null) {
+        min = "auto";
+        max = t as `${number}fr`;
+      } else {
+        min = t as "auto" | "min-content" | "max-content";
+        max = t as "auto" | "min-content" | "max-content";
       }
+    } else {
+      min = t.min;
+      max = t.max;
     }
+
+    const base =
+      typeof min === "number" ? min : min === "max-content" ? maxC : minC;
+    const fr = parseFr(max);
+    let limit: number;
+    let stretch = false;
+    if (fr !== null) {
+      // Flexible maxes don't grow in the maximize step; §12.7 handles them.
+      limit = base;
+    } else if (typeof max === "number") {
+      limit = max;
+    } else if (max === "min-content") {
+      limit = minC;
+    } else {
+      limit = maxC;
+      if (max === "auto") stretch = true;
+    }
+    if (limit < base) limit = base;
+
+    sizes.push(base);
+    limits.push(limit);
+    factors.push(fr);
+    stretchable.push(stretch);
   }
-  if (flexIndices.length === 0) return sizes;
+
+  const flexIndices: number[] = [];
+  for (let i = 0; i < count; i++) {
+    if (factors[i] !== null) flexIndices.push(i);
+  }
 
   if (available === undefined) {
-    // Indefinite space: the used fr unit is the max of base/factor over the
-    // flexible tracks (factors below 1 treated as 1), so every fr track fits
-    // its content at that unit.
+    // Indefinite space: no maximize/stretch; fr unit is the max of
+    // base/factor over the flexible tracks (factors below 1 treated as 1).
     let frUnit = 0;
-    for (let k = 0; k < flexIndices.length; k++) {
-      if (factors[k] > 0) {
-        frUnit = Math.max(
-          frUnit,
-          sizes[flexIndices[k]] / Math.max(factors[k], 1),
-        );
-      }
+    for (const i of flexIndices) {
+      const f = factors[i]!;
+      if (f > 0) frUnit = Math.max(frUnit, sizes[i] / Math.max(f, 1));
     }
-    for (let k = 0; k < flexIndices.length; k++) {
-      sizes[flexIndices[k]] = Math.max(
-        sizes[flexIndices[k]],
-        frUnit * factors[k],
-      );
+    for (const i of flexIndices) {
+      sizes[i] = Math.max(sizes[i], frUnit * factors[i]!);
     }
     return sizes;
   }
 
-  let leftover = available - gap * Math.max(0, count - 1);
-  for (let i = 0; i < count; i++) {
-    if (!flexIndices.includes(i)) leftover -= sizes[i];
-  }
-  const frozen = new Set<number>();
-  for (;;) {
-    let sumFactors = 0;
-    let free = leftover;
-    for (let k = 0; k < flexIndices.length; k++) {
-      if (frozen.has(k)) free -= sizes[flexIndices[k]];
-      else sumFactors += factors[k];
+  const innerSpace = available - gap * Math.max(0, count - 1);
+
+  // §12.6 maximize: equal shares up to growth limits
+  let free = innerSpace;
+  for (let i = 0; i < count; i++) free -= sizes[i];
+  if (free > 0) {
+    let growable: number[] = [];
+    for (let i = 0; i < count; i++) {
+      if (sizes[i] < limits[i]) growable.push(i);
     }
-    if (sumFactors === 0) break;
-    const denom = Math.max(sumFactors, 1);
-    let refroze = false;
-    for (let k = 0; k < flexIndices.length; k++) {
-      if (frozen.has(k)) continue;
-      if ((free * factors[k]) / denom < sizes[flexIndices[k]]) {
-        frozen.add(k);
-        refroze = true;
+    while (free > 1e-9 && growable.length > 0) {
+      const share = free / growable.length;
+      const next: number[] = [];
+      for (const i of growable) {
+        const grow = Math.min(share, limits[i] - sizes[i]);
+        sizes[i] += grow;
+        free -= grow;
+        if (sizes[i] < limits[i] - 1e-9) next.push(i);
       }
+      if (next.length === growable.length) break;
+      growable = next;
     }
-    if (!refroze) {
-      for (let k = 0; k < flexIndices.length; k++) {
-        if (!frozen.has(k)) {
-          sizes[flexIndices[k]] = (free * factors[k]) / denom;
+  }
+
+  // §12.7 expand flexible tracks, treating bases as content minimums
+  if (flexIndices.length > 0) {
+    let leftover = innerSpace;
+    for (let i = 0; i < count; i++) {
+      if (factors[i] === null) leftover -= sizes[i];
+    }
+    const frozen = new Set<number>();
+    for (;;) {
+      let sumFactors = 0;
+      let flexFree = leftover;
+      for (const i of flexIndices) {
+        if (frozen.has(i)) flexFree -= sizes[i];
+        else sumFactors += factors[i]!;
+      }
+      if (sumFactors === 0) break;
+      const denom = Math.max(sumFactors, 1);
+      let refroze = false;
+      for (const i of flexIndices) {
+        if (frozen.has(i)) continue;
+        if ((flexFree * factors[i]!) / denom < sizes[i]) {
+          frozen.add(i);
+          refroze = true;
         }
       }
-      break;
+      if (!refroze) {
+        for (const i of flexIndices) {
+          if (!frozen.has(i)) sizes[i] = (flexFree * factors[i]!) / denom;
+        }
+        break;
+      }
     }
   }
+
+  // Content-distribution stretch: leftover free space goes equally to
+  // auto-max tracks, ignoring growth limits.
+  let remaining = innerSpace;
+  for (let i = 0; i < count; i++) remaining -= sizes[i];
+  if (remaining > 0) {
+    const stretchIndices: number[] = [];
+    for (let i = 0; i < count; i++) {
+      if (stretchable[i]) stretchIndices.push(i);
+    }
+    if (stretchIndices.length > 0) {
+      const each = remaining / stretchIndices.length;
+      for (const i of stretchIndices) sizes[i] += each;
+    }
+  }
+
   return sizes;
 }
 

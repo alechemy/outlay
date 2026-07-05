@@ -1351,58 +1351,84 @@ export function solveLayout(
         rowTracks.length,
       );
 
-      // Min-content contributions of span-1 items, per track (outer size incl. margins)
-      const colContributions = new Array<number>(colCount).fill(0);
-      const rowContributions = new Array<number>(rowCount).fill(0);
+      // Intrinsic contributions of span-1 items, per track (outer size incl. margins)
+      const colMinContributions = new Array<number>(colCount).fill(0);
+      const colMaxContributions = new Array<number>(colCount).fill(0);
+      const rowMinContributions = new Array<number>(rowCount).fill(0);
+      const rowMaxContributions = new Array<number>(rowCount).fill(0);
       for (const child of gridItems) {
         const p = placements.get(child.id)!;
         const cm = boxModelMap.get(child.id)!;
         if (p.colEnd - p.colStart === 1) {
-          const contentW =
-            typeof child.width === "number"
-              ? cm.contentWidth
-              : computeIntrinsicContentSize(
-                  child,
-                  "width",
-                  nodeMap,
-                  boxModelMap,
-                  "min-content",
-                );
-          const outer =
-            contentW +
+          const hPBM =
             cm.paddingLeft +
             cm.paddingRight +
             cm.borderLeft +
             cm.borderRight +
             cm.marginLeft +
             cm.marginRight;
-          colContributions[p.colStart] = Math.max(
-            colContributions[p.colStart],
-            outer,
+          const definite = typeof child.width === "number";
+          const minW = definite
+            ? cm.contentWidth
+            : computeIntrinsicContentSize(
+                child,
+                "width",
+                nodeMap,
+                boxModelMap,
+                "min-content",
+              );
+          const maxW = definite
+            ? cm.contentWidth
+            : computeIntrinsicContentSize(
+                child,
+                "width",
+                nodeMap,
+                boxModelMap,
+                "max-content",
+              );
+          colMinContributions[p.colStart] = Math.max(
+            colMinContributions[p.colStart],
+            minW + hPBM,
+          );
+          colMaxContributions[p.colStart] = Math.max(
+            colMaxContributions[p.colStart],
+            maxW + hPBM,
           );
         }
         if (p.rowEnd - p.rowStart === 1) {
-          const contentH =
-            typeof child.height === "number"
-              ? cm.contentHeight
-              : computeIntrinsicContentSize(
-                  child,
-                  "height",
-                  nodeMap,
-                  boxModelMap,
-                  "min-content",
-                );
-          const outer =
-            contentH +
+          const vPBM =
             cm.paddingTop +
             cm.paddingBottom +
             cm.borderTop +
             cm.borderBottom +
             cm.marginTop +
             cm.marginBottom;
-          rowContributions[p.rowStart] = Math.max(
-            rowContributions[p.rowStart],
-            outer,
+          const definite = typeof child.height === "number";
+          const minH = definite
+            ? cm.contentHeight
+            : computeIntrinsicContentSize(
+                child,
+                "height",
+                nodeMap,
+                boxModelMap,
+                "min-content",
+              );
+          const maxH = definite
+            ? cm.contentHeight
+            : computeIntrinsicContentSize(
+                child,
+                "height",
+                nodeMap,
+                boxModelMap,
+                "max-content",
+              );
+          rowMinContributions[p.rowStart] = Math.max(
+            rowMinContributions[p.rowStart],
+            minH + vPBM,
+          );
+          rowMaxContributions[p.rowStart] = Math.max(
+            rowMaxContributions[p.rowStart],
+            maxH + vPBM,
           );
         }
       }
@@ -1418,14 +1444,16 @@ export function solveLayout(
         colCount,
         colGap,
         widthDefinite ? model.contentWidth : undefined,
-        colContributions,
+        colMinContributions,
+        colMaxContributions,
       );
       const rowSizes = resolveTrackSizes(
         rowTracks,
         rowCount,
         rowGap,
         heightDefinite ? model.contentHeight : undefined,
-        rowContributions,
+        rowMinContributions,
+        rowMaxContributions,
       );
 
       if (!heightDefinite) {

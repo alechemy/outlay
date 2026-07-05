@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import puppeteer, { Browser } from "puppeteer";
-import { LayoutNode } from "../src/types";
+import { LayoutNode, TrackListEntry } from "../src/types";
 import { expandTrackList } from "../src/grid";
 import { gridStyleDeclarations } from "./grid-css";
 
@@ -39,6 +39,7 @@ let tier16Config = { category: 0 };
 let tier17Config = { category: 0 };
 let tier18Config = { category: 0 };
 let tier19Config = { category: 0 };
+let tier20Config = { category: 0 };
 
 function maybeLiteralAuto(node: LayoutNode, rng: RNG, depth: number) {
   if (node.width === undefined && rng.next() < 0.15) node.width = "auto";
@@ -1180,6 +1181,51 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
       }
       if (rng.next() < 0.4) node.height = rng.nextRange(20, 120);
     }
+  } else if (tier === 20) {
+    const cat = tier20Config.category;
+    if (depth > 0) {
+      node.display = "grid";
+      node.width = rng.nextRange(200, 700);
+      if (cat !== 4) node.height = rng.nextRange(150, 500);
+      const colCount = rng.nextRange(2, 4);
+      const rowCount = rng.nextRange(2, 3);
+      const genTrack = (axis: "col" | "row"): TrackListEntry => {
+        const px = () =>
+          axis === "col" ? rng.nextRange(40, 160) : rng.nextRange(30, 120);
+        const r = rng.next();
+        if (cat === 2) {
+          if (r < 0.45) {
+            const a = px();
+            const b = px();
+            return { min: Math.min(a, b), max: Math.max(a, b) };
+          }
+          if (r < 0.7) {
+            return {
+              min: px(),
+              max: rng.next() < 0.5 ? ("auto" as const) : ("1fr" as const),
+            };
+          }
+          return r < 0.85 ? ("auto" as const) : px();
+        }
+        if (cat === 3) {
+          if (r < 0.3) return "min-content" as const;
+          if (r < 0.6) return "max-content" as const;
+          return r < 0.8 ? ("auto" as const) : px();
+        }
+        if (r < 0.5) return "auto" as const;
+        return px();
+      };
+      node.gridTemplateColumns = Array.from({ length: colCount }, () =>
+        genTrack("col"),
+      );
+      node.gridTemplateRows = Array.from({ length: rowCount }, () =>
+        genTrack("row"),
+      );
+      if (cat !== 0) node.gap = genGap(rng);
+    } else {
+      if (rng.next() < 0.6) node.width = rng.nextRange(30, 200);
+      if (rng.next() < 0.6) node.height = rng.nextRange(20, 120);
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1307,7 +1353,7 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                         : rng.nextRange(3, 6)
                     : tier === 16
                       ? rng.nextRange(2, 5)
-                    : tier === 18 || tier === 19
+                    : tier >= 18 && tier <= 20
                       ? rng.nextRange(2, 4)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
@@ -1315,7 +1361,7 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
     for (let i = 0; i < numChildren; i++) {
       node.children.push(genNode(rng, depth - 1, tier));
     }
-    if ((tier === 18 || tier === 19) && node.display === "grid") {
+    if (tier >= 18 && tier <= 20 && node.display === "grid") {
       assignGridPlacements(node, rng, tier === 18 && tier18Config.category === 2);
     }
   }
@@ -1439,6 +1485,9 @@ async function generateFixtures(
     if (tier === 19) {
       tier19Config.category = i % 5;
     }
+    if (tier === 20) {
+      tier20Config.category = i % 5;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -1459,7 +1508,7 @@ async function generateFixtures(
                 : 1
             : tier === 17
               ? 3
-            : tier === 18 || tier === 19
+            : tier >= 18 && tier <= 20
               ? 1
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||
