@@ -48,7 +48,7 @@ function toSvg(tree: LayoutNode, boxes: Map<string, ResolvedBox>): string {
   parts.push(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">`,
   );
-  parts.push(`<rect width="${W}" height="${H}" rx="14" fill="#f5f1ea"/>`);
+  parts.push(`<rect width="${W}" height="${H}" rx="14" fill="#f4f7f9"/>`);
 
   for (const { id, depth } of order) {
     const b = boxes.get(id);
@@ -57,7 +57,7 @@ function toSvg(tree: LayoutNode, boxes: Map<string, ResolvedBox>): string {
     const y = +(b.y - root.y + PAD).toFixed(2);
     const w = +b.borderBoxWidth.toFixed(2);
     const h = +b.borderBoxHeight.toFixed(2);
-    const fill = depth === 0 ? "#fffdf8" : FILL[(depth - 1) % FILL.length];
+    const fill = depth === 0 ? "#ffffff" : FILL[(depth - 1) % FILL.length];
     parts.push(
       `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" ` +
         `fill="${fill}" stroke="${STROKE}" stroke-width="1"/>`,
