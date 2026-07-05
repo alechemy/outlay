@@ -1529,6 +1529,42 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
       if (rng.next() < 0.5) node.width = rng.nextRange(30, 130);
       if (rng.next() < 0.5) node.height = rng.nextRange(20, 90);
     }
+  } else if (tier === 25) {
+    if (depth > 0) {
+      node.display = "grid";
+      node.width = rng.nextRange(250, 700);
+      if (rng.next() < 0.6) node.height = rng.nextRange(150, 450);
+      const track = (): TrackListEntry => {
+        const r = rng.next();
+        if (r < 0.35) return rng.nextRange(50, 150);
+        if (r < 0.7) return "auto";
+        return "1fr";
+      };
+      node.gridTemplateColumns = Array.from(
+        { length: rng.nextRange(2, 3) },
+        track,
+      );
+      node.gridTemplateRows = Array.from(
+        { length: rng.nextRange(2, 3) },
+        track,
+      );
+      if (rng.next() < 0.7) node.gap = genGap(rng);
+      if (rng.next() < 0.4) {
+        node.justifyItems = rng.nextChoice([
+          "start",
+          "center",
+          "stretch",
+        ] as const);
+      }
+    } else {
+      if (rng.next() < 0.7) {
+        (node as any)._contentWidth = rng.nextRange(30, 200);
+        (node as any)._contentHeight = rng.nextRange(20, 120);
+      } else {
+        if (rng.next() < 0.6) node.width = rng.nextRange(30, 130);
+        if (rng.next() < 0.6) node.height = rng.nextRange(20, 90);
+      }
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1670,6 +1706,8 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                       ? rng.nextRange(2, 4)
                     : tier === 24
                       ? rng.nextRange(2, 8)
+                    : tier === 25
+                      ? rng.nextRange(3, 6)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -1690,6 +1728,9 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
       }
     }
     if (tier === 23 && node.display === "grid" && rng.next() < 0.5) {
+      assignGridPlacements(node, rng, false);
+    }
+    if (tier === 25 && node.display === "grid" && rng.next() < 0.5) {
       assignGridPlacements(node, rng, false);
     }
     if (tier === 24 && node.display === "grid" && tier24Config.category === 2) {
@@ -1850,7 +1891,7 @@ async function generateFixtures(
                 : 1
             : tier === 17
               ? 3
-            : (tier >= 18 && tier <= 22) || tier === 24
+            : (tier >= 18 && tier <= 22) || tier === 24 || tier === 25
               ? 1
             : tier === 23
               ? 2
