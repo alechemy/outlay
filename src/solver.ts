@@ -16,8 +16,8 @@ import {
     GridLayoutInfo,
     expandTrackList,
     gridAreaSize,
-    resolveFixedTrackSizes,
     resolvePlacements,
+    resolveTrackSizes,
     trackOffsets,
 } from "./grid.js";
 
@@ -1350,11 +1350,85 @@ export function solveLayout(
         colTracks.length,
         rowTracks.length,
       );
-      const colSizes = resolveFixedTrackSizes(colTracks, colCount);
-      const rowSizes = resolveFixedTrackSizes(rowTracks, rowCount);
+
+      // Min-content contributions of span-1 items, per track (outer size incl. margins)
+      const colContributions = new Array<number>(colCount).fill(0);
+      const rowContributions = new Array<number>(rowCount).fill(0);
+      for (const child of gridItems) {
+        const p = placements.get(child.id)!;
+        const cm = boxModelMap.get(child.id)!;
+        if (p.colEnd - p.colStart === 1) {
+          const contentW =
+            typeof child.width === "number"
+              ? cm.contentWidth
+              : computeIntrinsicContentSize(
+                  child,
+                  "width",
+                  nodeMap,
+                  boxModelMap,
+                  "min-content",
+                );
+          const outer =
+            contentW +
+            cm.paddingLeft +
+            cm.paddingRight +
+            cm.borderLeft +
+            cm.borderRight +
+            cm.marginLeft +
+            cm.marginRight;
+          colContributions[p.colStart] = Math.max(
+            colContributions[p.colStart],
+            outer,
+          );
+        }
+        if (p.rowEnd - p.rowStart === 1) {
+          const contentH =
+            typeof child.height === "number"
+              ? cm.contentHeight
+              : computeIntrinsicContentSize(
+                  child,
+                  "height",
+                  nodeMap,
+                  boxModelMap,
+                  "min-content",
+                );
+          const outer =
+            contentH +
+            cm.paddingTop +
+            cm.paddingBottom +
+            cm.borderTop +
+            cm.borderBottom +
+            cm.marginTop +
+            cm.marginBottom;
+          rowContributions[p.rowStart] = Math.max(
+            rowContributions[p.rowStart],
+            outer,
+          );
+        }
+      }
 
       const resolvedDims = parentResolvedDims.get(node.id);
-      if (typeof node.height !== "number" && !resolvedDims?.has("height")) {
+      const widthDefinite =
+        typeof node.width === "number" || resolvedDims?.has("width") === true;
+      const heightDefinite =
+        typeof node.height === "number" || resolvedDims?.has("height") === true;
+
+      const colSizes = resolveTrackSizes(
+        colTracks,
+        colCount,
+        colGap,
+        widthDefinite ? model.contentWidth : undefined,
+        colContributions,
+      );
+      const rowSizes = resolveTrackSizes(
+        rowTracks,
+        rowCount,
+        rowGap,
+        heightDefinite ? model.contentHeight : undefined,
+        rowContributions,
+      );
+
+      if (!heightDefinite) {
         const trackHeight =
           rowSizes.reduce((a, b) => a + b, 0) +
           rowGap * Math.max(0, rowSizes.length - 1);

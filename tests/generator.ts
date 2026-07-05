@@ -38,6 +38,7 @@ let tier15Config = { category: 0 };
 let tier16Config = { category: 0 };
 let tier17Config = { category: 0 };
 let tier18Config = { category: 0 };
+let tier19Config = { category: 0 };
 
 function maybeLiteralAuto(node: LayoutNode, rng: RNG, depth: number) {
   if (node.width === undefined && rng.next() < 0.15) node.width = "auto";
@@ -1143,6 +1144,42 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
       if (rng.next() < 0.4) node.width = rng.nextRange(30, 120);
       if (rng.next() < 0.4) node.height = rng.nextRange(20, 100);
     }
+  } else if (tier === 19) {
+    const cat = tier19Config.category;
+    if (depth > 0) {
+      node.display = "grid";
+      node.width = rng.nextRange(200, 700);
+      if (cat !== 4) node.height = rng.nextRange(150, 500);
+      const colCount = rng.nextRange(2, 4);
+      const rowCount = rng.nextRange(2, 3);
+      const frFactor = () =>
+        `${rng.nextChoice([0.5, 1, 1, 2, 3])}fr` as `${number}fr`;
+      node.gridTemplateColumns = Array.from({ length: colCount }, () =>
+        rng.next() < 0.5 ? frFactor() : rng.nextRange(40, 160),
+      );
+      if (!node.gridTemplateColumns.some((t) => typeof t === "string")) {
+        node.gridTemplateColumns[rng.nextRange(0, colCount - 1)] = "1fr";
+      }
+      if (cat === 2 || cat === 4) {
+        node.gridTemplateRows = Array.from({ length: rowCount }, () =>
+          rng.next() < 0.5 ? frFactor() : rng.nextRange(30, 120),
+        );
+        if (!node.gridTemplateRows.some((t) => typeof t === "string")) {
+          node.gridTemplateRows[rng.nextRange(0, rowCount - 1)] = "1fr";
+        }
+      } else {
+        node.gridTemplateRows = Array.from({ length: rowCount }, () =>
+          rng.nextRange(30, 120),
+        );
+      }
+      if (cat !== 0) node.gap = genGap(rng);
+    } else {
+      const wideItems = tier19Config.category === 3;
+      if (rng.next() < (wideItems ? 0.8 : 0.5)) {
+        node.width = rng.nextRange(30, wideItems ? 400 : 200);
+      }
+      if (rng.next() < 0.4) node.height = rng.nextRange(20, 120);
+    }
   } else if (tier === 7) {
     if (depth === 2) {
       // Root flex container — definite sizes
@@ -1270,7 +1307,7 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
                         : rng.nextRange(3, 6)
                     : tier === 16
                       ? rng.nextRange(2, 5)
-                    : tier === 18
+                    : tier === 18 || tier === 19
                       ? rng.nextRange(2, 4)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
@@ -1278,8 +1315,8 @@ function genNode(rng: RNG, depth: number, tier: number): LayoutNode {
     for (let i = 0; i < numChildren; i++) {
       node.children.push(genNode(rng, depth - 1, tier));
     }
-    if (tier === 18 && node.display === "grid") {
-      assignGridPlacements(node, rng, tier18Config.category === 2);
+    if ((tier === 18 || tier === 19) && node.display === "grid") {
+      assignGridPlacements(node, rng, tier === 18 && tier18Config.category === 2);
     }
   }
 
@@ -1399,6 +1436,9 @@ async function generateFixtures(
     if (tier === 18) {
       tier18Config.category = i % 5;
     }
+    if (tier === 19) {
+      tier19Config.category = i % 5;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -1419,7 +1459,7 @@ async function generateFixtures(
                 : 1
             : tier === 17
               ? 3
-            : tier === 18
+            : tier === 18 || tier === 19
               ? 1
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||

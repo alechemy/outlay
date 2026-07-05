@@ -95,14 +95,96 @@ export function resolvePlacements(
   return { placements, colCount, rowCount };
 }
 
-export function resolveFixedTrackSizes(
+function trackFlexFactor(t: TrackSize | undefined): number | null {
+  if (typeof t === "string" && t.endsWith("fr")) return parseFloat(t);
+  if (
+    typeof t === "object" &&
+    t !== null &&
+    typeof t.max === "string" &&
+    t.max.endsWith("fr")
+  ) {
+    return parseFloat(t.max);
+  }
+  return null;
+}
+
+export function resolveTrackSizes(
   tracks: TrackSize[],
   count: number,
+  gap: number,
+  available: number | undefined,
+  contributions: number[],
 ): number[] {
   const sizes: number[] = [];
+  const flexIndices: number[] = [];
+  const factors: number[] = [];
   for (let i = 0; i < count; i++) {
     const t = tracks[i];
-    sizes.push(typeof t === "number" ? t : 0);
+    const fr = trackFlexFactor(t);
+    if (typeof t === "number") {
+      sizes.push(t);
+    } else {
+      sizes.push(contributions[i] ?? 0);
+      if (fr !== null) {
+        flexIndices.push(i);
+        factors.push(fr);
+      }
+    }
+  }
+  if (flexIndices.length === 0) return sizes;
+
+  if (available === undefined) {
+    // Indefinite space: the used fr unit is the max of base/factor over the
+    // flexible tracks (factors below 1 treated as 1), so every fr track fits
+    // its content at that unit.
+    let frUnit = 0;
+    for (let k = 0; k < flexIndices.length; k++) {
+      if (factors[k] > 0) {
+        frUnit = Math.max(
+          frUnit,
+          sizes[flexIndices[k]] / Math.max(factors[k], 1),
+        );
+      }
+    }
+    for (let k = 0; k < flexIndices.length; k++) {
+      sizes[flexIndices[k]] = Math.max(
+        sizes[flexIndices[k]],
+        frUnit * factors[k],
+      );
+    }
+    return sizes;
+  }
+
+  let leftover = available - gap * Math.max(0, count - 1);
+  for (let i = 0; i < count; i++) {
+    if (!flexIndices.includes(i)) leftover -= sizes[i];
+  }
+  const frozen = new Set<number>();
+  for (;;) {
+    let sumFactors = 0;
+    let free = leftover;
+    for (let k = 0; k < flexIndices.length; k++) {
+      if (frozen.has(k)) free -= sizes[flexIndices[k]];
+      else sumFactors += factors[k];
+    }
+    if (sumFactors === 0) break;
+    const denom = Math.max(sumFactors, 1);
+    let refroze = false;
+    for (let k = 0; k < flexIndices.length; k++) {
+      if (frozen.has(k)) continue;
+      if ((free * factors[k]) / denom < sizes[flexIndices[k]]) {
+        frozen.add(k);
+        refroze = true;
+      }
+    }
+    if (!refroze) {
+      for (let k = 0; k < flexIndices.length; k++) {
+        if (!frozen.has(k)) {
+          sizes[flexIndices[k]] = (free * factors[k]) / denom;
+        }
+      }
+      break;
+    }
   }
   return sizes;
 }
