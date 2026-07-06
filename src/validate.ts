@@ -30,6 +30,7 @@ const ENUM_PROPS: Record<string, readonly string[]> = {
     "stretch",
     "space-between",
     "space-around",
+    "space-evenly",
   ],
   alignSelf: ["auto", "flex-start", "flex-end", "center", "stretch", "baseline"],
   position: ["static", "relative", "absolute", "fixed"],

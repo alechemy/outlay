@@ -1758,6 +1758,14 @@ export function solveLayout(
               crossStart = remainingCross;
             }
             break;
+          case "space-evenly":
+            if (remainingCross > 0 && numLines > 0) {
+              interLineGap = remainingCross / (numLines + 1);
+              crossStart = interLineGap;
+            } else if (node.flexWrap === "wrap-reverse") {
+              crossStart = remainingCross;
+            }
+            break;
         }
 
         let curCrossOffset = crossStart;

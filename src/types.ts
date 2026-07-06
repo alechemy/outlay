@@ -83,7 +83,8 @@ export interface LayoutNode {
     | "center"
     | "stretch"
     | "space-between"
-    | "space-around";
+    | "space-around"
+    | "space-evenly";
   gap?: number | { row: number; column: number };
 
   flexGrow?: number;
@@ -159,7 +160,8 @@ export interface NormalizedLayoutNode {
     | "center"
     | "stretch"
     | "space-between"
-    | "space-around";
+    | "space-around"
+    | "space-evenly";
   gap?: number | { row: number; column: number };
 
   flexGrow?: number;
