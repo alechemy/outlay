@@ -78,6 +78,7 @@ let tier33Config: { category: number; dir: "row" | "column" } = {
   category: 0,
   dir: "row",
 };
+let tier34Config = { category: 0 };
 
 const TEXT_FONT = "16px Arial";
 const TEXT_LINE_HEIGHT = 20;
@@ -2256,6 +2257,121 @@ function genNode(rng: RNG, depth: number, tier: number): GenNode {
       node.height = rng.nextRange(20, 60);
       node.flexShrink = rng.nextChoice([0, 0, 1]);
     }
+  } else if (tier === 34) {
+    const cat = tier34Config.category;
+    if (depth === 2) {
+      if (cat === 3) {
+        node.display = "grid";
+        node.width = rng.nextRange(300, 640);
+        node.height = rng.nextRange(220, 480);
+        node.gridTemplateColumns = Array.from(
+          { length: 2 },
+          (): TrackListEntry => rng.nextRange(120, 260),
+        );
+        node.gridTemplateRows = Array.from(
+          { length: rng.nextRange(1, 2) },
+          (): TrackListEntry => rng.nextRange(90, 200),
+        );
+        if (rng.next() < 0.4) node.gap = genGap(rng);
+      } else {
+        node.display = "flex";
+        node.flexDirection = cat === 0 ? "row" : "column";
+        node.flexWrap = "nowrap";
+        node.width = rng.nextRange(250, 550);
+        node.height = rng.nextRange(200, 450);
+        if (rng.next() < 0.4) {
+          node.alignItems = rng.nextChoice([
+            "flex-start",
+            "center",
+            "stretch",
+          ] as const);
+        }
+        if (rng.next() < 0.3) node.gap = genGap(rng);
+      }
+    } else if (depth === 1) {
+      node.display = "flex";
+      const keywordChoice = rng.nextChoice([
+        "min-content",
+        "max-content",
+      ] as const);
+      if (cat === 0) {
+        node.flexDirection = "row";
+        if (rng.next() < 0.5) node.flexWrap = "wrap";
+        const mode = rng.next();
+        if (mode < 0.35) {
+          node.maxWidth = keywordChoice;
+          node.flexGrow = 1;
+        } else if (mode < 0.6) {
+          node.minWidth = "max-content";
+          if (rng.next() < 0.6) node.width = rng.nextRange(30, 80);
+          node.flexShrink = rng.nextChoice([0, 1]);
+        } else {
+          node.minWidth = keywordChoice;
+          node.flexShrink = 1;
+        }
+      } else if (cat === 1) {
+        node.flexDirection = "column";
+        const mode = rng.next();
+        if (mode < 0.4) {
+          node.maxHeight = keywordChoice;
+          node.flexGrow = rng.nextChoice([0, 1]);
+        } else if (mode < 0.7) {
+          node.minHeight = "max-content";
+          if (rng.next() < 0.6) node.height = rng.nextRange(20, 60);
+        } else {
+          node.minHeight = "min-content";
+          node.flexShrink = 1;
+        }
+      } else if (cat === 2) {
+        node.flexDirection = "row";
+        if (rng.next() < 0.5) node.flexWrap = "wrap";
+        const mode = rng.next();
+        if (mode < 0.5) {
+          node.maxWidth = keywordChoice;
+        } else {
+          node.minWidth = "max-content";
+          if (rng.next() < 0.5) node.width = rng.nextRange(30, 80);
+        }
+        if (rng.next() < 0.4) {
+          node.alignSelf = rng.nextChoice([
+            "flex-start",
+            "center",
+            "stretch",
+          ] as const);
+        }
+      } else {
+        // Keyword heights only on column children: row-wrap heights are
+        // width-dependent and outside the static keyword resolution.
+        node.flexDirection = rng.next() < 0.6 ? "row" : "column";
+        if (node.flexDirection === "row" && rng.next() < 0.5)
+          node.flexWrap = "wrap";
+        if (node.flexDirection === "row" || rng.next() < 0.5) {
+          if (rng.next() < 0.5) node.maxWidth = keywordChoice;
+          else node.minWidth = "max-content";
+        } else {
+          if (rng.next() < 0.5) node.maxHeight = keywordChoice;
+          else node.minHeight = "max-content";
+        }
+        if (rng.next() < 0.4) {
+          node.justifySelf = rng.nextChoice([
+            "start",
+            "center",
+            "stretch",
+          ] as const);
+        }
+      }
+      if (rng.next() < 0.3) {
+        const p = rng.nextRange(2, 12);
+        node.padding = { top: p, right: p, bottom: p, left: p };
+      }
+      if (rng.next() < 0.4) {
+        node.boxSizing = rng.next() < 0.5 ? "border-box" : "content-box";
+      }
+    } else {
+      node.width = rng.nextRange(30, 90);
+      node.height = rng.nextRange(20, 60);
+      node.flexShrink = rng.nextChoice([0, 0, 1]);
+    }
   }
 
   if (depth > 0 && !isLeaf) {
@@ -2333,6 +2449,10 @@ function genNode(rng: RNG, depth: number, tier: number): GenNode {
                           ? Math.min(rng.nextRange(3, 6), tier32Config.cells)
                           : rng.nextRange(2, 4)
                     : tier === 33
+                      ? depth === 2
+                        ? rng.nextRange(2, 3)
+                        : rng.nextRange(2, 5)
+                    : tier === 34
                       ? depth === 2
                         ? rng.nextRange(2, 3)
                         : rng.nextRange(2, 5)
@@ -2426,12 +2546,15 @@ function toHTML(node: GenNode): string {
   if (node.order !== undefined) styles.push(`order: ${node.order}`);
   if (node.aspectRatio !== undefined)
     styles.push(`aspect-ratio: ${node.aspectRatio}`);
-  if (node.minWidth !== undefined) styles.push(`min-width: ${node.minWidth}px`);
-  if (node.maxWidth !== undefined) styles.push(`max-width: ${node.maxWidth}px`);
+  const mm = (v: number | string) => (typeof v === "number" ? `${v}px` : v);
+  if (node.minWidth !== undefined)
+    styles.push(`min-width: ${mm(node.minWidth)}`);
+  if (node.maxWidth !== undefined)
+    styles.push(`max-width: ${mm(node.maxWidth)}`);
   if (node.minHeight !== undefined)
-    styles.push(`min-height: ${node.minHeight}px`);
+    styles.push(`min-height: ${mm(node.minHeight)}`);
   if (node.maxHeight !== undefined)
-    styles.push(`max-height: ${node.maxHeight}px`);
+    styles.push(`max-height: ${mm(node.maxHeight)}`);
   if (node.position && node.position !== "static")
     styles.push(`position: ${node.position}`);
   if (node.top !== undefined) styles.push(`top: ${node.top}px`);
@@ -2539,6 +2662,9 @@ async function generateFixtures(
     if (tier === 33) {
       tier33Config.category = i % 4;
     }
+    if (tier === 34) {
+      tier34Config.category = i % 4;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -2568,7 +2694,7 @@ async function generateFixtures(
                 tier === 32
               ? 1
             : tier === 23 || tier === 28 || tier === 29 || tier === 30 ||
-                tier === 33
+                tier === 33 || tier === 34
               ? 2
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||

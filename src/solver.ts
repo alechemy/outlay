@@ -43,6 +43,12 @@ function normalizeNode(node: LayoutNode): NormalizedLayoutNode {
   return {
     ...node,
     id: node.id as string,
+    // Keyword min/max sizes are resolved to numbers by resolveKeywordSizes
+    // before anything consumes them; downstream code sees numbers only.
+    minWidth: node.minWidth as number | undefined,
+    maxWidth: node.maxWidth as number | undefined,
+    minHeight: node.minHeight as number | undefined,
+    maxHeight: node.maxHeight as number | undefined,
     padding: normalizeSides(node.padding),
     margin: normalizeMargin(node.margin),
     border: normalizeSides(node.border),
@@ -316,7 +322,14 @@ function usedInlineSize(
   nodeMap: Map<string, NormalizedLayoutNode>,
   boxModelMap: Map<string, ResolvedBoxModel>,
 ): number | undefined {
-  if (typeof child.width === "number") return childModel.contentWidth;
+  const hPBClamp =
+    childModel.paddingLeft +
+    childModel.paddingRight +
+    childModel.borderLeft +
+    childModel.borderRight;
+  if (typeof child.width === "number") {
+    return clampCrossContent(child, childModel.contentWidth, hPBClamp, false);
+  }
   if (!containerWidthDefinite) return undefined;
   const hPB =
     childModel.paddingLeft +
@@ -358,6 +371,7 @@ function usedInlineSize(
     );
     value = Math.max(minC, Math.min(maxC, avail));
   }
+  value = clampCrossContent(child, value, hPB, false);
   return clampCrossContent(child, value, hPB, false);
 }
 
@@ -848,6 +862,36 @@ export function solveLayout(
         model.borderBottom;
       node.height = borderBox ? intrinsic + pb : intrinsic;
     }
+    const hPB =
+      model.paddingLeft +
+      model.paddingRight +
+      model.borderLeft +
+      model.borderRight;
+    const vPB =
+      model.paddingTop +
+      model.paddingBottom +
+      model.borderTop +
+      model.borderBottom;
+    const resolveMinMax = (
+      value: number | undefined,
+      dim: "width" | "height",
+    ): number | undefined => {
+      const keyword = value as unknown;
+      if (keyword !== "min-content" && keyword !== "max-content") return value;
+      const intrinsic = computeIntrinsicContentSize(
+        node,
+        dim,
+        nodeMap,
+        boxModelMap,
+        keyword,
+      );
+      const pb = dim === "width" ? hPB : vPB;
+      return borderBox ? intrinsic + pb : intrinsic;
+    };
+    node.minWidth = resolveMinMax(node.minWidth, "width");
+    node.maxWidth = resolveMinMax(node.maxWidth, "width");
+    node.minHeight = resolveMinMax(node.minHeight, "height");
+    node.maxHeight = resolveMinMax(node.maxHeight, "height");
   }
   resolveKeywordSizes(normalizedRoot);
 
@@ -2455,7 +2499,10 @@ export function solveLayout(
             boxModelMap,
             "max-content",
           );
-          if (child.measureContent && child.children.length === 0) {
+          if (
+            (child.measureContent && child.children.length === 0) ||
+            child.children.length > 0
+          ) {
             // fit-content: shrink to the area when the content overflows it,
             // never below the widest unbreakable piece (min-content).
             const minContent = computeIntrinsicContentSize(

@@ -59,10 +59,10 @@ export interface LayoutNode {
 
   width?: number | "auto" | "min-content" | "max-content" | "fit-content";
   height?: number | "auto" | "min-content" | "max-content" | "fit-content";
-  minWidth?: number;
-  maxWidth?: number;
-  minHeight?: number;
-  maxHeight?: number;
+  minWidth?: number | "min-content" | "max-content";
+  maxWidth?: number | "min-content" | "max-content";
+  minHeight?: number | "min-content" | "max-content";
+  maxHeight?: number | "min-content" | "max-content";
   /** width / height. Applies to the box selected by `boxSizing`. */
   aspectRatio?: number;
   padding?: BoxSidesInput;
