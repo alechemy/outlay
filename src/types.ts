@@ -53,7 +53,8 @@ export type MarginSidesInput = number | Partial<MarginBoxSides>;
  * or a partial object (unspecified sides default to zero).
  */
 export interface LayoutNode {
-  id: string;
+  /** Optional: nodes without an id get a collision-safe auto id. */
+  id?: string;
 
   width?: number | "auto" | "min-content" | "max-content" | "fit-content";
   height?: number | "auto" | "min-content" | "max-content" | "fit-content";
@@ -210,6 +211,8 @@ export interface NormalizedLayoutNode {
 
 export interface LayoutResult {
   boxes: Map<string, ResolvedBox>;
+  /** The same boxes keyed by the original input node references. */
+  nodes: Map<LayoutNode, ResolvedBox>;
 }
 
 export interface ResolvedBox {

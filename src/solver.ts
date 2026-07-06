@@ -42,6 +42,7 @@ function normalizeMargin(input: MarginSidesInput | undefined): MarginBoxSides {
 function normalizeNode(node: LayoutNode): NormalizedLayoutNode {
   return {
     ...node,
+    id: node.id as string,
     padding: normalizeSides(node.padding),
     margin: normalizeMargin(node.margin),
     border: normalizeSides(node.border),
@@ -49,6 +50,29 @@ function normalizeNode(node: LayoutNode): NormalizedLayoutNode {
     display: node.display ?? "flex",
     children: (node.children ?? []).map(normalizeNode),
   };
+}
+
+/** Fills in missing ids ("auto-N", skipping any the caller already used). */
+function assignAutoIds(root: NormalizedLayoutNode): void {
+  const used = new Set<string>();
+  const collect = (n: NormalizedLayoutNode) => {
+    if (n.id !== undefined) used.add(n.id);
+    for (const c of n.children) collect(c);
+  };
+  collect(root);
+  let counter = 1;
+  const assign = (n: NormalizedLayoutNode) => {
+    if (n.id === undefined) {
+      let id: string;
+      do {
+        id = `auto-${counter++}`;
+      } while (used.has(id));
+      n.id = id;
+      used.add(id);
+    }
+    for (const c of n.children) assign(c);
+  };
+  assign(root);
 }
 
 function clampCrossContent(
@@ -731,11 +755,20 @@ export function solveLayout(
   options?: SolverOptions,
 ): LayoutResultWithTrace {
   const normalizedRoot = normalizeNode(root);
+  assignAutoIds(normalizedRoot);
+  const sourceNodes = new Map<string, LayoutNode>();
+  const linkSources = (n: NormalizedLayoutNode, s: LayoutNode) => {
+    sourceNodes.set(n.id, s);
+    const sourceChildren = s.children ?? [];
+    n.children.forEach((c, i) => linkSources(c, sourceChildren[i]));
+  };
+  linkSources(normalizedRoot, root);
   const debug = options?.debug ?? false;
   const trace = debug ? createTrace() : undefined;
 
   const result: LayoutResultWithTrace = {
     boxes: new Map<string, ResolvedBox>(),
+    nodes: new Map<LayoutNode, ResolvedBox>(),
   };
 
   const nodeMap = new Map<string, NormalizedLayoutNode>();
@@ -3260,6 +3293,11 @@ export function solveLayout(
   };
 
   emitBoxes(normalizedRoot, rootBorderBoxX, rootBorderBoxY, rootContainingBlock);
+
+  for (const [id, source] of sourceNodes) {
+    const box = result.boxes.get(id);
+    if (box) result.nodes.set(source, box);
+  }
 
   if (trace) {
     result.trace = trace;

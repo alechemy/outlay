@@ -63,12 +63,20 @@ function messages(node: LayoutNode): string {
   );
 }
 
-// Missing id
+// Missing id is allowed (auto-assigned by the solver)
 assert(
-  issuesOf({ children: [] } as unknown as LayoutNode).some(
-    (i) => i.severity === "error" && i.message.includes(`"id" is required`),
+  issuesOf({ children: [] } as LayoutNode).length === 0,
+  "missing id is not an issue",
+);
+
+// Empty-string id is still an error
+assert(
+  issuesOf({ id: "" } as LayoutNode).some(
+    (i) =>
+      i.severity === "error" &&
+      i.message.includes(`"id" must be a non-empty string`),
   ),
-  "missing id is an error",
+  "empty id is an error",
 );
 
 // Percentage and CSS-string sizes

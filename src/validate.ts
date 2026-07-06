@@ -135,13 +135,13 @@ function visit(
   const warn = (message: string) =>
     issues.push({ nodeId: id, path, severity: "warning", message });
 
-  if (id === null) {
-    err(`"id" is required and must be a non-empty string`);
-  } else if (seenIds.has(id)) {
+  if (node.id !== undefined && id === null) {
+    err(`"id" must be a non-empty string when provided`);
+  } else if (id !== null && seenIds.has(id)) {
     err(
       `duplicate id "${id}" (also at ${seenIds.get(id)}); result boxes are keyed by id, so one node silently overwrites the other`,
     );
-  } else {
+  } else if (id !== null) {
     seenIds.set(id, path);
   }
 
