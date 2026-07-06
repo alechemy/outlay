@@ -1,6 +1,21 @@
 # Changelog
 
-## 1.0.0 — Unreleased
+## 1.1.0 — 2026-07-05
+
+- `aspectRatio` on flex and grid items: transfer through the box-sizing box, transferred automatic minimums, and grid's normal-vs-explicit-stretch precedence, verified against Chromium (tier 32).
+- `fit-content` as a `width`/`height` keyword and `{ fitContent: px }` grid tracks (tier 33).
+- `alignContent: "space-evenly"` for flex and grid (tier 31).
+- Node `id` is now optional — missing ids are auto-assigned, and `solveLayout` results are also keyed by input node reference via `result.nodes`.
+- `result.contentSize` (union border-box extent), `ResolvedBox.parentId`, and `ResolvedBox.baseline`.
+- `outlay/html`: `parseHTML`, a strict HTML-with-inline-styles → `LayoutNode` converter that throws `HTMLParseError` on anything outside the supported vocabulary.
+- `outlay/text`: Node-safe LayoutUnit-quantized greedy line breaker (`measureFromAdvances`, `measureFromWordWidths`, `textNode`).
+- `outlay/pretext`: browser/worker text measurement via Pretext (`text`, `measureText`); `@chenglou/pretext` is an optional peer dependency.
+- Debug traces now include per-container grid track sizes, offsets, and placements.
+- All public types are exported; the build ships source maps and declaration maps; `sideEffects: false` and an `engines` field.
+- `validateTree`: warns on `flexBasis: "content"` with a definite main size (direction-aware).
+- Now verified against Chromium across 4,150 fixtures (33 tiers).
+
+## 1.0.0 — 2026-07-05
 
 Initial release.
 
