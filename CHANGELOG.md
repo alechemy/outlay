@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 — 2026-07-06
+
+- `parseHTML` accepts percentage `width`/`height`/`flex-basis` (including the `flex` shorthand), matching the solver vocabulary; percentages remain rejected where unsupported (min/max, padding, tracks).
+- New HTML Playground demo: paste HTML with inline styles, laid out off-DOM and compared live against the browser, with the strict parse-error UX on display.
+- Layout Explorer gains controls for `aspectRatio`, percentage and `fit-content` sizes, keyword min/max, `fit-content()` tracks, and `alignContent` (including `space-evenly`) — 61 headlessly verified steps.
+
 ## 1.2.0 — 2026-07-06
 
 - Percentage sizes: `"N%"` on `width`/`height`/`flexBasis` of flex children, resolved against the containing block's content box per box-sizing — including parents sized by the solver itself (flex-grown, stretched, and auto-main containers, where percentages re-resolve once the main size is determined, matching Chromium's cyclic behavior).
