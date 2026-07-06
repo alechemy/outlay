@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%232f9e44'/><path d='M6.5 2v12M2 6.5h12' stroke='white' stroke-width='1.6'/></svg>">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HTML Playground — outlay</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --page-bg: #fdfefe;
+        --grid: #e9eff3;
+        --fg: #16222c;
+        --muted: #5a6b7a;
+        --line: #d0d0d0;
+        --rule: #d5dde4;
+        --panel: #ffffff;
+        --accent: #1e7e34;
+        --selected: #e3f2e6;
+        --frame: #fcfdfe;
+        --ok: #1a7f37;
+        --bad: #b42318;
+        --warn: #9a6700;
+        --warn-bg: #fff4d6;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page-bg: #131519;
+          --grid: #232830;
+          --fg: #e8e8e8;
+          --muted: #9aa0aa;
+          --line: #333842;
+          --rule: #2b313b;
+          --panel: #1b1e24;
+          --accent: #3fb950;
+          --selected: #223026;
+          --frame: #14171c;
+          --ok: #3fb950;
+          --bad: #f85149;
+          --warn: #e3b341;
+          --warn-bg: #2b2413;
+        }
+      }
+      :root[data-theme="dark"] {
+        --page-bg: #131519;
+        --grid: #232830;
+        --fg: #e8e8e8;
+        --muted: #9aa0aa;
+        --line: #333842;
+        --rule: #2b313b;
+        --panel: #1b1e24;
+        --accent: #3fb950;
+        --selected: #223026;
+        --frame: #14171c;
+        --ok: #3fb950;
+        --bad: #f85149;
+        --warn: #e3b341;
+        --warn-bg: #2b2413;
+      }
+      :root[data-theme="light"] {
+        --page-bg: #fdfefe;
+        --grid: #e9eff3;
+        --fg: #16222c;
+        --muted: #5a6b7a;
+        --line: #d0d0d0;
+        --rule: #d5dde4;
+        --panel: #ffffff;
+        --accent: #1e7e34;
+        --selected: #e3f2e6;
+        --frame: #fcfdfe;
+        --ok: #1a7f37;
+        --bad: #b42318;
+        --warn: #9a6700;
+        --warn-bg: #fff4d6;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 24px;
+        font: 14px/1.5 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: var(--fg);
+        background-color: var(--page-bg);
+        background-image:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+        background-size: 28px 28px;
+      }
+      .wrap { width: min(1240px, calc(100vw - 48px)); margin: 0 auto; }
+
+      a.back {
+        display: inline-block;
+        margin-bottom: 10px;
+        font: 12px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      a.back:hover { text-decoration: underline; color: var(--accent); }
+      h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+      p.lede { color: var(--muted); margin: 0 0 8px; max-width: 76ch; }
+      p.note {
+        color: var(--muted);
+        margin: 0 0 18px;
+        max-width: 76ch;
+        font-size: 12.5px;
+      }
+      code {
+        font: 12.5px ui-monospace, "SF Mono", Menlo, monospace;
+        background: var(--selected);
+        padding: 1px 5px;
+      }
+      strong { color: var(--fg); }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+      }
+      .toolbar .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+      .btn {
+        font: 500 12px/1 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        padding: 6px 11px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--fg);
+        cursor: pointer;
+        transition: border-color 100ms, background 100ms;
+      }
+      .btn:hover { border-color: var(--accent); }
+      .btn.invalid { border-color: color-mix(in srgb, var(--warn) 55%, var(--rule)); color: var(--warn); }
+      .spacer { flex: 1; }
+      #match-status {
+        font: 600 12px/1 ui-monospace, "SF Mono", Menlo, monospace;
+        padding: 7px 12px;
+        border-radius: 6px;
+        white-space: nowrap;
+      }
+      #match-status.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+      #match-status.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+      #match-status.warn { color: var(--warn); background: var(--warn-bg); }
+
+      .main {
+        display: grid;
+        grid-template-columns: 380px minmax(0, 1fr);
+        gap: 20px;
+        align-items: start;
+      }
+      @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+
+      .editor { display: flex; flex-direction: column; gap: 12px; }
+      textarea {
+        width: 100%;
+        height: 460px;
+        resize: vertical;
+        padding: 12px;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--fg);
+        font: 12.5px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        tab-size: 2;
+        white-space: pre;
+      }
+      textarea:focus { outline: none; border-color: var(--accent); }
+
+      #error-panel {
+        display: none;
+        border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--rule));
+        border-left-width: 4px;
+        background: var(--warn-bg);
+        border-radius: 6px;
+        padding: 10px 12px;
+        font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      #error-panel.show { display: block; }
+      #error-panel .etitle {
+        font-weight: 700;
+        color: var(--warn);
+        margin-bottom: 6px;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        font-size: 10.5px;
+      }
+      #error-panel .epath {
+        color: var(--fg);
+        background: color-mix(in srgb, var(--warn) 20%, transparent);
+        padding: 1px 5px;
+        border-radius: 3px;
+      }
+      #error-panel .emsg { color: var(--fg); margin-top: 6px; word-break: break-word; }
+
+      .panes { display: flex; flex-direction: column; gap: 18px; }
+      .panes.dimmed { opacity: 0.4; filter: grayscale(0.5); transition: opacity 120ms; }
+      .pane h2 {
+        font: 600 11px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 0 0 8px;
+      }
+      .pane-frame {
+        border: 1px dashed var(--line);
+        border-radius: 6px;
+        background: var(--frame);
+        overflow: auto;
+        padding: 16px;
+      }
+
+      #solver-root { position: relative; }
+      .solver-box {
+        position: absolute;
+        border: 1px solid rgba(0, 0, 0, 0.18);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .solver-box.mismatch { outline: 2px solid var(--bad); outline-offset: -1px; }
+      .box-label {
+        position: absolute;
+        top: 2px;
+        left: 4px;
+        font: 10px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+        color: rgba(0, 0, 0, 0.55);
+        pointer-events: none;
+        white-space: nowrap;
+      }
+
+      /* Browser pane hosts the raw HTML rendered with genuine browser defaults.
+         Force content-box so the page-wide border-box reset can't leak in and
+         diverge from parseHTML's content-box default. */
+      #browser-host, #browser-host * { box-sizing: content-box; }
+      #browser-host div { border-radius: 2px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <a class="back" href="index.html">← all demos</a>
+      <h1>HTML Playground</h1>
+      <p class="lede">
+        Paste HTML with inline styles; <strong>outlay</strong> parses it with
+        <code>parseHTML</code>, lays it out off-DOM with <code>solveLayout</code>,
+        and draws the boxes on the left — checked live against the real browser on
+        the right. The parser is strict on purpose: anything outside its supported
+        vocabulary throws with the exact path to the offending element, so the
+        error state is a feature, not a failure.
+      </p>
+      <p class="note">
+        Every container spells out <code>display</code>: an absent
+        <code>display</code> maps to outlay's <code>flex</code> default, whereas
+        the injected browser markup would default to <code>block</code> — so the
+        presets declare it to keep the comparison honest.
+      </p>
+
+      <div class="toolbar">
+        <div class="presets">
+          <button class="btn" data-preset="seed">Dashboard grid</button>
+          <button class="btn" data-preset="flex">Flex feed</button>
+          <button class="btn" data-preset="grid">Auto-fill grid</button>
+          <button class="btn invalid" data-preset="invalid">Invalid (em units)</button>
+        </div>
+        <span class="spacer"></span>
+        <span id="match-status"></span>
+      </div>
+
+      <div class="main">
+        <div class="editor">
+          <textarea id="source" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+          <div id="error-panel">
+            <div class="etitle" id="error-title">HTMLParseError</div>
+            <div id="error-path-row">at <span class="epath" id="error-path"></span></div>
+            <div class="emsg" id="error-message"></div>
+          </div>
+        </div>
+        <div class="panes" id="panes">
+          <div class="pane">
+            <h2>Solver (off-DOM)</h2>
+            <div class="pane-frame"><div id="solver-root"></div></div>
+          </div>
+          <div class="pane">
+            <h2>Browser reference</h2>
+            <div class="pane-frame"><div id="browser-host"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./html-playground.ts"></script>
+  </body>
+</html>

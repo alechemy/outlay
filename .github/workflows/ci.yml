@@ -32,4 +32,5 @@ jobs:
       - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: npm run verify:explorer
       - run: npm run verify:text-demo
+      - run: npm run verify:html-demo
       - run: npm run bench

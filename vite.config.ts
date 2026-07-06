@@ -50,6 +50,7 @@ export default defineConfig({
         "virtual-scroll": resolve(__dirname, "pages/demos/virtual-scroll.html"),
         "text-layout": resolve(__dirname, "pages/demos/text-layout.html"),
         dashboard: resolve(__dirname, "pages/demos/dashboard.html"),
+        "html-playground": resolve(__dirname, "pages/demos/html-playground.html"),
       },
     },
   },
