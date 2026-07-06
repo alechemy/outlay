@@ -23,6 +23,12 @@ export class HTMLParseError extends Error {
 }
 
 const KEYWORD_SIZES = new Set(["auto", "min-content", "max-content"]);
+const SIZE_KEYWORDS = new Set([
+  "auto",
+  "min-content",
+  "max-content",
+  "fit-content",
+]);
 
 const ENUM_PROPS: Record<string, { field: string; values: readonly string[] }> =
   {
@@ -62,6 +68,7 @@ const ENUM_PROPS: Record<string, { field: string; values: readonly string[] }> =
         "stretch",
         "space-between",
         "space-around",
+        "space-evenly",
       ],
     },
     "align-self": {
@@ -183,6 +190,7 @@ function convertElement(
 
   const node: LayoutNode = { id };
   applyStyle(node, el.attribs.style, path);
+  if (node.boxSizing === undefined) node.boxSizing = "content-box";
 
   const children: LayoutNode[] = [];
   let elementIndex = 0;
@@ -267,6 +275,9 @@ function applyStyle(
         break;
       case "max-height":
         node.maxHeight = parsePx(value, prop, fail, false);
+        break;
+      case "aspect-ratio":
+        node.aspectRatio = parseAspectRatio(value, prop, fail);
         break;
 
       case "padding":
@@ -441,9 +452,34 @@ function parseSize(
   value: string,
   prop: string,
   fail: (m: string) => never,
-): number | "auto" | "min-content" | "max-content" {
-  if (KEYWORD_SIZES.has(value)) return value as "auto";
+): number | "auto" | "min-content" | "max-content" | "fit-content" {
+  if (SIZE_KEYWORDS.has(value)) return value as "auto";
+  if (/^fit-content\(/i.test(value))
+    fail(
+      `"${prop}: ${value}" — only the bare fit-content keyword is supported as a size; fit-content() with an argument is not`,
+    );
   return parsePx(value, prop, fail, false);
+}
+
+function parseAspectRatio(
+  value: string,
+  prop: string,
+  fail: (m: string) => never,
+): number {
+  if (/\bauto\b/.test(value))
+    fail(`"${prop}: ${value}" — auto is not supported; provide a numeric ratio`);
+  const slash = value.indexOf("/");
+  if (slash === -1) {
+    const n = asNumber(value);
+    if (n === null || n <= 0)
+      fail(`"${prop}: ${value}" must be a positive number or "W / H" ratio`);
+    return n;
+  }
+  const w = asNumber(value.slice(0, slash).trim());
+  const h = asNumber(value.slice(slash + 1).trim());
+  if (w === null || h === null || w <= 0 || h <= 0)
+    fail(`"${prop}: ${value}" must be a positive number or "W / H" ratio`);
+  return w / h;
 }
 
 function parsePx(
@@ -700,8 +736,7 @@ function parseTrackSize(
   if (KEYWORD_SIZES.has(lower)) return lower as "auto";
   if (isFr(lower)) return normalizeFr(lower);
   if (/^minmax\(/i.test(lower)) return parseMinmax(lower, prop, fail);
-  if (/^fit-content\(/i.test(lower))
-    fail(`"${prop}: ${token}" — fit-content() is not supported`);
+  if (/^fit-content\(/i.test(lower)) return parseFitContent(lower, prop, fail);
   if (/^repeat\(/i.test(lower))
     fail(`"${prop}: ${token}" — repeat() is not allowed here`);
   if (lower.startsWith("["))
@@ -711,6 +746,22 @@ function parseTrackSize(
       `"${prop}: ${token}" — percentage tracks are not supported; resolve them against the container first`,
     );
   fail(`"${prop}: ${token}" is not a valid track size`);
+}
+
+function parseFitContent(
+  token: string,
+  prop: string,
+  fail: (m: string) => never,
+): TrackSize {
+  const inner = insideParens(token, "fit-content", prop, fail).trim();
+  const px = asPx(inner);
+  if (px === null)
+    fail(
+      `"${prop}: ${token}" — fit-content() takes a single <number>px length (percentages and other units are not supported)`,
+    );
+  if (px < 0)
+    fail(`"${prop}: ${token}" — fit-content() length must not be negative`);
+  return { fitContent: px };
 }
 
 function parseMinmax(

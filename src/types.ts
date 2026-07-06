@@ -43,7 +43,8 @@ export type MarginSidesInput = number | Partial<MarginBoxSides>;
 /**
  * Public input type for layout nodes.
  *
- * Only `id` is required. Defaults:
+ * Every field is optional. Defaults:
+ * - `id`: auto-assigned (results are also keyed by node reference)
  * - `padding`, `margin`, `border`: zero on all sides
  * - `boxSizing`: `"border-box"`
  * - `display`: `"flex"`

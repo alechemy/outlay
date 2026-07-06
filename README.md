@@ -1,6 +1,6 @@
 # outlay
 
-Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes without a browser, verified against Chromium's own layout engine at 0.5px tolerance across 3,700 generated fixtures. The layout equivalent of what [Pretext](https://github.com/chenglou/pretext) does for text measurement: extracting a DOM-dependent computation into standalone arithmetic.
+Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes without a browser, verified against Chromium's own layout engine at 0.5px tolerance across 4,150 generated fixtures. The layout equivalent of what [Pretext](https://github.com/chenglou/pretext) does for text measurement: extracting a DOM-dependent computation into standalone arithmetic.
 
 ## Installation
 
@@ -30,7 +30,41 @@ boxes.get("sidebar"); // { x: 0, y: 0, width: 100, height: 200, ... }
 boxes.get("main"); // { x: 100, y: 0, width: 300, height: 200, ... }
 ```
 
-Only `id` is required per node. Everything else has sensible defaults.
+Every field is optional. Nodes without an `id` get a collision-safe auto id, and
+results are also keyed by the input node objects themselves:
+
+```ts
+const sidebar = { width: 100 };
+const { nodes } = solveLayout({ width: 400, height: 200, children: [sidebar] });
+nodes.get(sidebar); // same ResolvedBox, no ids involved
+```
+
+## HTML input
+
+If a layout already exists in your head as markup, `outlay/html` converts an
+HTML snippet with inline styles into a `LayoutNode` tree:
+
+```ts
+import { parseHTML } from "outlay/html";
+
+const tree = parseHTML(`
+  <div style="display: flex; width: 400px; height: 200px; gap: 8px">
+    <div id="sidebar" style="width: 100px"></div>
+    <div style="flex: 1"></div>
+  </div>
+`);
+const { boxes } = solveLayout(tree);
+```
+
+The converter is strict by design: anything it accepts maps 1:1 onto the
+supported vocabulary, and anything else (percentages, `em`, `calc()`, classes,
+unknown properties, text content) throws an `HTMLParseError` naming the
+offending declaration and element. Two deliberate mappings to know about:
+elements without a `display` declaration become outlay's default (`flex`, not
+CSS's `block`), and elements without `box-sizing` get an explicit
+`"content-box"` (the browser default) so converted trees match what the
+markup renders. It's a porting and experimentation tool — for programmatic
+layout, build `LayoutNode` trees directly.
 
 ## Demos
 
@@ -53,11 +87,14 @@ Live at [alechemy.github.io/outlay](https://alechemy.github.io/outlay/): a layou
 
 ## API
 
-### `solveLayout(root, options?) => { boxes }`
+### `solveLayout(root, options?) => { boxes, nodes, contentSize }`
 
 - `root`: `LayoutNode` -- the tree to solve
-- `options.debug`: `boolean` -- when true, returns a `trace` object with intermediate algorithm state
-- Returns `{ boxes: Map<string, ResolvedBox> }`
+- `options.debug`: `boolean` -- when true, returns a `trace` object with intermediate algorithm state (flex phases plus per-container grid track sizes, offsets, and placements)
+- Returns:
+  - `boxes: Map<string, ResolvedBox>` -- keyed by node id
+  - `nodes: Map<LayoutNode, ResolvedBox>` -- the same boxes keyed by the input node references
+  - `contentSize: { width, height }` -- the union extent of all border boxes (the scrollable size; e.g. total content height for a virtual scroller)
 
 ### `validateTree(root) => ValidationIssue[]`
 
@@ -82,15 +119,16 @@ const { boxes } = solveLayout(tree);
 
 ```ts
 interface LayoutNode {
-  id: string;
+  id?: string; // auto-assigned when omitted
 
   // Box model
-  width?: number | "auto" | "min-content" | "max-content";
-  height?: number | "auto" | "min-content" | "max-content";
+  width?: number | "auto" | "min-content" | "max-content" | "fit-content";
+  height?: number | "auto" | "min-content" | "max-content" | "fit-content";
   minWidth?: number;
   maxWidth?: number;
   minHeight?: number;
   maxHeight?: number;
+  aspectRatio?: number; // width / height, applied to the box-sizing box
   padding?: number | Partial<BoxSides>;
   margin?: number | Partial<MarginBoxSides>; // supports "auto" per-side
   border?: number | Partial<BoxSides>;
@@ -114,7 +152,8 @@ interface LayoutNode {
     | "center"
     | "stretch"
     | "space-between"
-    | "space-around";
+    | "space-around"
+    | "space-evenly";
   gap?: number | { row: number; column: number };
 
   // Flex item
@@ -151,6 +190,7 @@ interface LayoutNode {
 ```ts
 interface ResolvedBox {
   id: string;
+  parentId?: string; // input-tree parent (undefined for the root)
   x: number; // border-box position relative to root's content-box origin
   y: number;
   width: number; // content-box dimensions
@@ -162,6 +202,7 @@ interface ResolvedBox {
   borderBoxHeight: number;
   outerWidth: number; // borderBoxWidth + margin left + right
   outerHeight: number;
+  baseline?: number; // border-box top to first baseline
 }
 ```
 
@@ -175,29 +216,33 @@ See [Text](#text) for the Pretext adapter.
 
 The engine does no line breaking itself. A text leaf is a node with a `measureContent` callback that reports the wrapped `{ width, height }` for a given available width. The solver measures each text item at its resolved width — the flex main size, or the grid column width after tracks resolve — so wrapped heights drive flex cross sizes and grid auto rows, and the widest word (`measureContent(0).width`) floors `min-width: auto` and intrinsic tracks.
 
-Any measurer that honors that contract works. [Pretext](https://github.com/chenglou/pretext) is a natural fit — the same "extract a DOM computation into arithmetic" idea, for text:
+Any measurer that honors that contract works, and two ship with the package:
+
+**In a browser or worker**, `outlay/pretext` wraps [Pretext](https://github.com/chenglou/pretext) (an optional peer dependency — `npm install @chenglou/pretext`):
 
 ```ts
-import { measureLineStats, prepareWithSegments } from "@chenglou/pretext";
+import { text } from "outlay/pretext";
 
-function makeTextMeasure(text: string, font: string, lineHeight: number) {
-  const prepared = prepareWithSegments(text, font); // one canvas pass, reusable
-  return (availableWidth: number) => {
-    const { lineCount, maxLineWidth } = measureLineStats(prepared, availableWidth);
-    return { width: maxLineWidth, height: Math.max(1, lineCount) * lineHeight };
-  };
-}
-
-const label = { id: "label", measureContent: makeTextMeasure(text, "16px Arial", 20) };
+const label = text("The quick brown fox", { font: "16px Arial", lineHeight: 20 });
+// → a LayoutNode leaf; spread extra props: text("…", { font, lineHeight, flexGrow: 1 })
 ```
 
-`measureLineStats` reports the widest line and the line count, which map directly onto the `{ width, height }` the solver expects at every probe width.
+`text()` runs Pretext's one-time canvas measurement pass, so it needs an `OffscreenCanvas` or DOM canvas and throws in bare Node.
 
-Two things to keep in mind:
+**In Node** (tests, servers), `outlay/text` provides the same greedy line breaker the fixture suite verifies against Chromium, driven by precomputed per-word advances:
 
-- **Browser/worker only.** `prepareWithSegments` (like `prepare`) needs an `OffscreenCanvas` or a DOM canvas for its measurement pass and throws in bare Node. Run it where a canvas exists, or precompute per-word advances offline and feed them to a greedy line breaker (this is exactly what the fixture suite does — measurement is captured from Chromium once, so a failing fixture indicts layout math, not text measurement).
+```ts
+import { measureFromWordWidths, textNode } from "outlay/text";
+
+const measure = measureFromWordWidths("The quick brown fox", wordMetricsTable);
+const label = textNode(measure, { id: "label" });
+```
+
+Capture the advances once (in a browser, or from font metrics) and commit them; `measureFromAdvances` takes a raw `number[]` if you manage words yourself.
+
+Things to keep in mind:
 - **Match the CSS wrapping mode.** Pretext models `overflow-wrap: break-word` (it breaks inside long words at narrow widths), so render the same text with `overflow-wrap: anywhere` for the browser to agree at widths narrower than a word. With `overflow-wrap: normal` the min-content is the widest word instead.
-- **Quantize like the engine for exact agreement.** Chromium stores accumulated line widths and intrinsic text widths as LayoutUnit (1/64px, floored), so at knife-edge widths a word fits where raw float accumulation says it doesn't. A measurer chasing Chromium to sub-pixel precision must floor the running line width to 1/64 before the fit comparison and floor the widths it returns; the solver itself stays quantization-free, so this contract lives entirely in the `measureContent` implementation (see the fixture runner's breaker in `tests/runner.ts`).
+- **Quantize like the engine for exact agreement.** Chromium stores accumulated line widths and intrinsic text widths as LayoutUnit (1/64px, floored), so at knife-edge widths a word fits where raw float accumulation says it doesn't. Both shipped measurers apply this quantization; if you write your own, floor the running line width to 1/64 before each fit comparison and floor the widths you return. The solver itself stays quantization-free — the contract lives entirely in the `measureContent` implementation.
 
 The `pages/demos/text-layout.html` demo wires this adapter into a live card grid and checks the solver against the browser at 0.5px tolerance.
 
@@ -226,12 +271,13 @@ guard — is in [`examples/layout-assertions/`](examples/layout-assertions/). Ru
 - Flexbox layout (row, column, reverse, wrap)
 - `flex-grow`, `flex-shrink`, `flex-basis` with iterative clamping
 - `justify-content`: all 6 values
-- `align-items` / `align-self` (including `baseline`) / `align-content`
+- `align-items` / `align-self` (including `baseline`) / `align-content` (all 7 values)
 - `gap` (single value and `{ row, column }`, including wrapped lines)
 - `min-width` / `max-width` / `min-height` / `max-height` on both axes
 - Multi-line wrapping (`wrap`, `wrap-reverse`)
 - Nested flex containers with indefinite size resolution
-- `min-content` / `max-content` intrinsic sizing on container widths/heights and on flex items
+- `min-content` / `max-content` / `fit-content` intrinsic sizing on container widths/heights and on flex items
+- `aspectRatio` on flex and grid items (transferred sizes, transferred automatic minimums, stretch precedence)
 - Width-dependent content via `measureContent` (e.g. text): items are measured at their resolved main size, so wrapped heights drive cross sizes, and the widest word floors `min-width: auto` and feeds line breaking (see [Text](#text))
 - `display: block` containers with children, nested anywhere in a flex tree
 - `position: absolute` and `position: fixed`
@@ -242,7 +288,7 @@ guard — is in [`examples/layout-assertions/`](examples/layout-assertions/). Ru
 
 CSS Grid (`display: "grid"`):
 
-- Track sizing: fixed px, `fr` (content-based minimums), `auto`, `minmax()`, `min-content` / `max-content`, `repeat` (fixed-count, `auto-fill`, and `auto-fit` with empty-track collapse)
+- Track sizing: fixed px, `fr` (content-based minimums), `auto`, `minmax()`, `min-content` / `max-content`, `fit-content(limit)` (as `{ fitContent: px }`), `repeat` (fixed-count, `auto-fill`, and `auto-fit` with empty-track collapse)
 - Placement: explicit lines (positive and negative), `span n`, sparse auto-placement (`row` and `column` flow), `dense` packing
 - Implicit tracks via `gridAutoRows` / `gridAutoColumns`
 - `gap` (single value and `{ row, column }`)
@@ -263,7 +309,7 @@ Grid exclusions (v1): no percentage tracks (caller resolves them), no named line
 
 ## Accuracy
 
-3700 fixtures across 30 tiers, all passing. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
+4150 fixtures across 33 tiers, all passing. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
 
 ## Performance
 

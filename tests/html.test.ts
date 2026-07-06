@@ -79,14 +79,16 @@ const happyTrees: LayoutNode[] = [];
     parsed,
     {
       id: "card",
+      boxSizing: "content-box",
       display: "flex",
       flexDirection: "column",
       gap: 8,
       padding: { top: 16, right: 16, bottom: 16, left: 16 },
       children: [
-        { id: "header", height: 40 },
+        { id: "header", boxSizing: "content-box", height: 40 },
         {
           id: "node-1",
+          boxSizing: "content-box",
           flexGrow: 1,
           flexShrink: 1,
           flexBasis: 0,
@@ -113,6 +115,7 @@ const happyTrees: LayoutNode[] = [];
     parsed,
     {
       id: "grid",
+      boxSizing: "content-box",
       display: "grid",
       width: 400,
       height: 200,
@@ -124,6 +127,7 @@ const happyTrees: LayoutNode[] = [];
       children: [
         {
           id: "cell",
+          boxSizing: "content-box",
           gridColumn: { start: 1, end: "span 2" },
           gridRow: { start: 2, end: "auto" },
         },
@@ -237,6 +241,107 @@ const happyTrees: LayoutNode[] = [];
   );
 }
 
+// align-content: space-evenly is now accepted
+{
+  const parsed = parseHTML(
+    `<div style="display: flex; flex-wrap: wrap; align-content: space-evenly"></div>`,
+  );
+  assertShape(
+    parsed.alignContent,
+    "space-evenly",
+    "align-content: space-evenly maps through",
+  );
+  const errors = validateTree(parsed).filter((i) => i.severity === "error");
+  assert(
+    errors.length === 0,
+    `space-evenly passes validateTree with no errors: ${errors.map((e) => e.message).join("; ")}`,
+  );
+  happyTrees.push(parsed);
+}
+
+// aspect-ratio: plain number and W / H ratio
+{
+  assertShape(
+    parseHTML(`<div style="aspect-ratio: 2"></div>`).aspectRatio,
+    2,
+    "aspect-ratio plain number",
+  );
+  assertShape(
+    parseHTML(`<div style="aspect-ratio: 0.5"></div>`).aspectRatio,
+    0.5,
+    "aspect-ratio fractional number",
+  );
+  assertShape(
+    parseHTML(`<div style="aspect-ratio: 16 / 9"></div>`).aspectRatio,
+    16 / 9,
+    "aspect-ratio W / H ratio",
+  );
+  assertShape(
+    parseHTML(`<div style="aspect-ratio:3/2"></div>`).aspectRatio,
+    3 / 2,
+    "aspect-ratio ratio without surrounding whitespace",
+  );
+  happyTrees.push(parseHTML(`<div style="width: 100px; aspect-ratio: 16 / 9"></div>`));
+}
+
+// width/height: bare fit-content keyword
+{
+  assertShape(
+    parseHTML(`<div style="width: fit-content"></div>`).width,
+    "fit-content",
+    "bare fit-content width keyword",
+  );
+  assertShape(
+    parseHTML(`<div style="height: fit-content"></div>`).height,
+    "fit-content",
+    "bare fit-content height keyword",
+  );
+}
+
+// grid tracks: fit-content(<px>)
+{
+  assertShape(
+    parseHTML(
+      `<div style="display: grid; grid-template-columns: fit-content(200px) 1fr 100px"></div>`,
+    ).gridTemplateColumns,
+    [{ fitContent: 200 }, "1fr", 100],
+    "fit-content(px) among other tracks in a template",
+  );
+  assertShape(
+    parseHTML(
+      `<div style="display: grid; grid-auto-rows: fit-content(120px)"></div>`,
+    ).gridAutoRows,
+    { fitContent: 120 },
+    "fit-content(px) as grid-auto-rows",
+  );
+  assertShape(
+    parseHTML(
+      `<div style="display: grid; grid-template-columns: repeat(2, fit-content(80px))"></div>`,
+    ).gridTemplateColumns,
+    [{ repeat: 2, tracks: [{ fitContent: 80 }] }],
+    "fit-content(px) inside repeat()",
+  );
+}
+
+// box-sizing: explicit declarations pass through, absence defaults to content-box
+{
+  assertShape(
+    parseHTML(`<div style="box-sizing: border-box"></div>`).boxSizing,
+    "border-box",
+    "explicit box-sizing: border-box passes through",
+  );
+  assertShape(
+    parseHTML(`<div style="box-sizing: content-box"></div>`).boxSizing,
+    "content-box",
+    "explicit box-sizing: content-box passes through",
+  );
+  assertShape(
+    parseHTML(`<div style="width: 10px"></div>`).boxSizing,
+    "content-box",
+    "absent box-sizing defaults to content-box (CSS default)",
+  );
+}
+
 // --- Round-trip sanity ---
 for (const tree of happyTrees) {
   const errors = validateTree(tree).filter((i) => i.severity === "error");
@@ -286,18 +391,53 @@ assertThrows(
   `duplicate id "x"`,
 );
 assertThrows(
-  `<div style="display: flex; align-content: space-evenly"></div>`,
-  "align-content: space-evenly throws",
-  "align-content",
-);
-assertThrows(
   `<div style="display: grid; grid-template-columns: [line1] 100px"></div>`,
   "named grid lines throw",
   "named grid lines",
 );
 assertThrows(
-  `<div style="display: grid; grid-template-columns: fit-content(100px)"></div>`,
-  "fit-content() track throws",
+  `<div style="aspect-ratio: auto"></div>`,
+  "aspect-ratio: auto throws",
+  "auto is not supported",
+);
+assertThrows(
+  `<div style="aspect-ratio: auto 16 / 9"></div>`,
+  "aspect-ratio: auto || ratio throws",
+  "auto is not supported",
+);
+assertThrows(
+  `<div style="aspect-ratio: -1"></div>`,
+  "negative aspect-ratio throws",
+  "positive number",
+);
+assertThrows(
+  `<div style="aspect-ratio: 0"></div>`,
+  "zero aspect-ratio throws",
+  "positive number",
+);
+assertThrows(
+  `<div style="aspect-ratio: 16 / 0"></div>`,
+  "aspect-ratio with a zero component throws",
+  "positive number",
+);
+assertThrows(
+  `<div style="aspect-ratio: wide"></div>`,
+  "non-numeric aspect-ratio throws",
+  "positive number",
+);
+assertThrows(
+  `<div style="width: fit-content(200px)"></div>`,
+  "width: fit-content(px) throws",
+  "bare fit-content keyword",
+);
+assertThrows(
+  `<div style="display: grid; grid-template-columns: fit-content(50%)"></div>`,
+  "fit-content(%) track throws",
+  "fit-content()",
+);
+assertThrows(
+  `<div style="display: grid; grid-template-columns: fit-content(min-content)"></div>`,
+  "fit-content(keyword) track throws",
   "fit-content()",
 );
 
