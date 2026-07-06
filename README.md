@@ -8,6 +8,8 @@ Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes wit
 npm install outlay
 ```
 
+ESM-only: the package ships as ES modules, with no CommonJS build.
+
 ## Quick example
 
 ```ts
@@ -67,7 +69,7 @@ The solver itself never validates: it assumes a well-formed tree and stays fast.
 Each issue carries `{ nodeId, path, severity, message }`, where `path` locates the node (e.g. `root.children[2]`).
 
 ```ts
-import { solveLayout, validateTree } from "...";
+import { solveLayout, validateTree } from "outlay";
 
 if (process.env.NODE_ENV !== "production") {
   const issues = validateTree(tree);
@@ -256,6 +258,7 @@ Grid exclusions (v1): no percentage tracks (caller resolves them), no named line
 - No rendering or painting -- output is a position/size map
 - No inline layout or line breaking (use Pretext for text)
 - No floats, no table layout
+- No right-to-left direction or writing modes -- layout is left-to-right, `horizontal-tb`
 - No block-flow margin collapsing, and no auto-height for `display: block` containers (give block containers a definite height)
 
 ## Accuracy

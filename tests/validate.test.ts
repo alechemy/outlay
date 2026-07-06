@@ -230,6 +230,42 @@ assert(
   ),
   "flexBasis content with definite size warns",
 );
+assert(
+  issuesOf({
+    id: "r",
+    flexDirection: "row",
+    children: [{ id: "c", flexBasis: "content", width: 100 }],
+  }).some(
+    (i) => i.severity === "warning" && i.message.includes(`"flexBasis: content" is treated as "auto"`),
+  ),
+  "flexBasis content with definite width warns in a row container",
+);
+assert(
+  issuesOf({
+    id: "r",
+    flexDirection: "column",
+    children: [{ id: "c", flexBasis: "content", height: 100 }],
+  }).some(
+    (i) => i.severity === "warning" && i.message.includes(`"flexBasis: content" is treated as "auto"`),
+  ),
+  "flexBasis content with definite height warns in a column container",
+);
+assert(
+  issuesOf({ id: "r", children: [{ id: "c", flexBasis: "content" }] }).every(
+    (i) => !i.message.includes(`"flexBasis: content" is treated as "auto"`),
+  ),
+  "flexBasis content with no definite main size does not warn",
+);
+assert(
+  issuesOf({
+    id: "r",
+    flexDirection: "column",
+    children: [{ id: "c", flexBasis: "content", width: 100 }],
+  }).every(
+    (i) => !i.message.includes(`"flexBasis: content" is treated as "auto"`),
+  ),
+  "flexBasis content with a definite cross-axis size does not warn",
+);
 
 console.log(`\n--- Validate Tests ---`);
 console.log(`Passed: ${passed}`);

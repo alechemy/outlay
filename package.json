@@ -16,6 +16,10 @@
   "author": "Alec Custer",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

@@ -4,9 +4,19 @@ export type { ValidationIssue } from "./validate.js";
 export type {
     BoxSides,
     BoxSidesInput,
+    DebugTrace,
+    FlexLineInfo,
     LayoutNode,
     LayoutResult,
+    LayoutResultWithTrace,
+    MarginBoxSides,
     MarginSidesInput,
-    ResolvedBox
+    ResolvedBox,
+    ResolvedBoxModel,
+    SolverOptions,
+    TrackDefinition,
+    TrackListEntry,
+    TrackRepeat,
+    TrackSize
 } from "./types.js";
 

@@ -273,13 +273,27 @@ function visit(
     }
   }
 
-  if (
-    flexBasis === "content" &&
-    (isFiniteNumber(node.width) || isFiniteNumber(node.height))
-  ) {
-    warn(
-      `"flexBasis: content" is treated as "auto", so the definite main size wins; in CSS, "content" would ignore it`,
-    );
+  if (display === "flex") {
+    const mainSizeProp =
+      node.flexDirection === "column" || node.flexDirection === "column-reverse"
+        ? "height"
+        : "width";
+    for (let i = 0; i < childList.length; i++) {
+      const child = childList[i] as Record<string, unknown>;
+      if (
+        child &&
+        typeof child === "object" &&
+        child.flexBasis === "content" &&
+        isFiniteNumber(child[mainSizeProp])
+      ) {
+        issues.push({
+          nodeId: typeof child.id === "string" ? child.id : null,
+          path: `${path}.children[${i}]`,
+          severity: "warning",
+          message: `"flexBasis: content" is treated as "auto", so the definite main size wins; in CSS, "content" would ignore it`,
+        });
+      }
+    }
   }
 
   for (let i = 0; i < childList.length; i++) {
