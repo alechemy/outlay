@@ -13,6 +13,7 @@
       }
       :root {
         color-scheme: light;
+        --grid: #e9eff3;
         --page: #f4f7f9;
         --panel: #ffffff;
         --ink: #16222c;
@@ -27,7 +28,11 @@
       body {
         margin: 0;
         min-height: 100vh;
-        background: var(--page);
+        background-color: var(--page-bg, #fdfefe);
+        background-image:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+        background-size: 28px 28px;
         color: var(--ink);
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
       }
@@ -73,7 +78,7 @@
       .intro code {
         background: var(--panel);
         border: 1px solid var(--rule);
-        border-radius: 4px;
+        border-radius: 0;
         padding: 0 4px;
         font:
           12px/1.4 "SF Mono",
@@ -90,7 +95,7 @@
       .seg {
         display: inline-flex;
         border: 1px solid var(--rule);
-        border-radius: 8px;
+        border-radius: 0;
         overflow: hidden;
         background: var(--panel);
       }
@@ -141,7 +146,7 @@
       .stage {
         position: relative;
         margin-top: 18px;
-        border-radius: 14px;
+        border-radius: 0;
         overflow: hidden;
         border: 1px solid var(--rule);
         box-shadow: 0 18px 40px rgb(54 40 23 / 0.1);
@@ -260,7 +265,7 @@
       .code-panel {
         margin-top: 14px;
         border: 1px solid var(--rule);
-        border-radius: 10px;
+        border-radius: 0;
         background: var(--panel);
         padding: 13px 16px;
         overflow-x: auto;

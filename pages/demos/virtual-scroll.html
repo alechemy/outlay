@@ -13,6 +13,7 @@
       }
       :root {
         color-scheme: light;
+        --grid: #e9eff3;
         --page: #f4f7f9;
         --panel: #ffffff;
         --ink: #16222c;
@@ -24,7 +25,11 @@
       body {
         margin: 0;
         min-height: 100vh;
-        background: var(--page);
+        background-color: var(--page-bg, #fdfefe);
+        background-image:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+        background-size: 28px 28px;
         color: var(--ink);
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
       }
@@ -70,7 +75,7 @@
       .intro code {
         background: var(--panel);
         border: 1px solid var(--rule);
-        border-radius: 4px;
+        border-radius: 0;
         padding: 0 4px;
         font:
           12px/1.4 "SF Mono",
@@ -92,7 +97,7 @@
         color: var(--muted);
         background: var(--panel);
         border: 1px solid var(--rule);
-        border-radius: 8px;
+        border-radius: 0;
         padding: 8px 11px;
       }
       .stat b {
@@ -107,7 +112,7 @@
         height: 560px;
         overflow-y: auto;
         border: 1px solid var(--rule);
-        border-radius: 12px;
+        border-radius: 0;
         background: var(--panel);
         box-shadow: 0 18px 40px rgb(54 40 23 / 0.08);
         scrollbar-gutter: stable;
@@ -135,7 +140,7 @@
           ui-monospace,
           monospace;
         border: 1px solid var(--rule);
-        border-radius: 8px;
+        border-radius: 0;
         background: var(--panel);
         color: var(--ink);
         padding: 9px 14px;
