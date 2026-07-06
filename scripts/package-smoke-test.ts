@@ -156,10 +156,11 @@ async function smokeTypeScript(tarballPath: string): Promise<void> {
   await writeFile(
     path.join(projectDir, "index.ts"),
     [
-      "import { solveLayout } from 'outlay';",
+      "import { solveLayout, relativeTo, hitTest } from 'outlay';",
       "import type { LayoutNode, LayoutResult, ResolvedBox, BoxSides } from 'outlay';",
       "import { parseHTML, HTMLParseError } from 'outlay/html';",
       "import { measureFromAdvances, type MeasureContent } from 'outlay/text';",
+      "import { sweep, assertNoOverlaps, overflowsX, overflowsY } from 'outlay/testing';",
       "",
       "const sides: BoxSides = { top: 0, right: 0, bottom: 0, left: 0 };",
       "const root: LayoutNode = {",
@@ -185,6 +186,13 @@ async function smokeTypeScript(tarballPath: string): Promise<void> {
       "HTMLParseError satisfies new (...args: never[]) => Error;",
       "const m: MeasureContent = measureFromAdvances([1], { spaceWidth: 1, lineHeight: 10 });",
       "m(100).width satisfies number;",
+      "",
+      "relativeTo(result, 'root') satisfies { x: number; y: number };",
+      "hitTest(result, 0, 0) satisfies ResolvedBox | undefined;",
+      "const failures = sweep([100, 200], (w: number): LayoutNode => ({ id: 'r', width: w, height: 10, children: [] }), (r: LayoutResult) => assertNoOverlaps(r));",
+      "failures satisfies { width: number; error: Error }[];",
+      "overflowsX(result, 'root') satisfies boolean;",
+      "overflowsY(result, 'root') satisfies boolean;",
       "",
     ].join("\n"),
   );

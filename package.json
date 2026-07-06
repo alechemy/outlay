@@ -17,6 +17,8 @@
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "engines": {
     "node": ">=22"
   },
@@ -25,6 +27,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "default": "./dist/testing.js"
     },
     "./html": {
       "types": "./dist/html.d.ts",
@@ -40,7 +47,8 @@
       "types": "./dist/pretext.d.ts",
       "import": "./dist/pretext.js",
       "default": "./dist/pretext.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "CHANGELOG.md",
@@ -55,6 +63,7 @@
     "test:trace": "tsx tests/trace-comparator.test.ts",
     "test:validate": "tsx tests/validate.test.ts",
     "test:api": "tsx tests/api.test.ts",
+    "test:testing": "tsx tests/testing.test.ts",
     "test:text": "tsx tests/text.test.ts",
     "test:html": "tsx tests/html.test.ts",
     "test:example": "npm run build && npm --prefix examples/layout-assertions install && npm --prefix examples/layout-assertions test",

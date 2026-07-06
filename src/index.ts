@@ -1,4 +1,5 @@
 export { solveLayout } from "./solver.js";
+export { hitTest, relativeTo } from "./helpers.js";
 export { validateTree } from "./validate.js";
 export type { ValidationIssue } from "./validate.js";
 export type {
@@ -6,6 +7,7 @@ export type {
     BoxSidesInput,
     DebugTrace,
     FlexLineInfo,
+    GridDebugInfo,
     LayoutNode,
     LayoutResult,
     LayoutResultWithTrace,
