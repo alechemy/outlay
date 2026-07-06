@@ -355,10 +355,25 @@ for (const tree of happyTrees) {
   );
 }
 
-// --- Strictness: every rule throws ---
+// --- Percentages: valid on width/height/flex-basis, rejected elsewhere ---
+{
+  const tree = parseHTML(
+    `<div style="display: flex; width: 400px; height: 100px"><div style="width: 50%; height: 25.5%"></div><div style="flex: 1 1 30%"></div><div style="flex-basis: 20%"></div></div>`,
+  );
+  const kids = tree.children!;
+  assert(kids[0].width === "50%", "percentage width maps through");
+  assert(kids[0].height === "25.5%", "fractional percentage height maps through");
+  assert(kids[1].flexBasis === "30%", "flex shorthand percentage basis maps through");
+  assert(kids[2].flexBasis === "20%", "flex-basis percentage maps through");
+}
 assertThrows(
-  `<div style="width: 50%"></div>`,
-  "percentage width throws",
+  `<div style="min-width: 50%"></div>`,
+  "percentage min-width throws",
+  "percentages",
+);
+assertThrows(
+  `<div style="padding: 10%"></div>`,
+  "percentage padding throws",
   "percentages",
 );
 assertThrows(`<div style="width: 2em"></div>`, "em unit throws", "em/rem");
@@ -445,7 +460,7 @@ assertThrows(
 {
   const e = catchErr(() =>
     parseHTML(
-      `<div id="root" style="display:flex"><span></span><div style="width: 50%"></div></div>`,
+      `<div id="root" style="display:flex"><span></span><div style="width: 2em"></div></div>`,
     ),
   );
   assert(e instanceof HTMLParseError, "nested failure is an HTMLParseError");

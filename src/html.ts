@@ -448,12 +448,20 @@ function applyStyle(
   if (row) node.gridRow = row;
 }
 
+function asPct(value: string): `${number}%` | null {
+  if (!/^\d*\.?\d+%$/.test(value)) return null;
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? (`${n}%` as `${number}%`) : null;
+}
+
 function parseSize(
   value: string,
   prop: string,
   fail: (m: string) => never,
-): number | "auto" | "min-content" | "max-content" | "fit-content" {
+): number | "auto" | "min-content" | "max-content" | "fit-content" | `${number}%` {
   if (SIZE_KEYWORDS.has(value)) return value as "auto";
+  const pct = asPct(value);
+  if (pct !== null) return pct;
   if (/^fit-content\(/i.test(value))
     fail(
       `"${prop}: ${value}" — only the bare fit-content keyword is supported as a size; fit-content() with an argument is not`,
@@ -549,8 +557,10 @@ function parseBasis(
   value: string,
   prop: string,
   fail: (m: string) => never,
-): number | "auto" | "content" {
+): number | "auto" | "content" | `${number}%` {
   if (value === "auto" || value === "content") return value;
+  const pct = asPct(value);
+  if (pct !== null) return pct;
   return parsePx(value, prop, fail, false);
 }
 
@@ -627,11 +637,17 @@ function applyFlexShorthand(
     return;
   }
   const numbers: number[] = [];
-  let basis: number | "auto" | "content" | undefined;
+  let basis: number | "auto" | "content" | `${number}%` | undefined;
   for (const token of splitSpaces(value)) {
     if (token === "auto" || token === "content") {
       if (basis !== undefined) fail(`"flex: ${value}" has more than one basis`);
       basis = token;
+      continue;
+    }
+    const pct = asPct(token);
+    if (pct !== null) {
+      if (basis !== undefined) fail(`"flex: ${value}" has more than one basis`);
+      basis = pct;
       continue;
     }
     const px = /px$/.test(token) ? asPx(token) : null;
