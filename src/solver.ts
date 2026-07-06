@@ -78,6 +78,30 @@ function clampCrossContent(
   return Math.max(minCross, Math.min(maxCross, value));
 }
 
+/**
+ * Transfers a content-box size to the other axis through the node's aspect
+ * ratio. The ratio applies to the box selected by box-sizing, so border-box
+ * nodes transfer at the border-box level.
+ */
+function transferRatioContent(
+  child: NormalizedLayoutNode,
+  model: ResolvedBoxModel,
+  from: "width" | "height",
+  fromContent: number,
+): number {
+  const r = child.aspectRatio!;
+  const hPB =
+    model.paddingLeft + model.paddingRight + model.borderLeft + model.borderRight;
+  const vPB =
+    model.paddingTop + model.paddingBottom + model.borderTop + model.borderBottom;
+  if (child.boxSizing === "border-box") {
+    return from === "width"
+      ? Math.max(0, (fromContent + hPB) / r - vPB)
+      : Math.max(0, (fromContent + vPB) * r - hPB);
+  }
+  return from === "width" ? fromContent / r : fromContent * r;
+}
+
 function resolveGaps(
   node: NormalizedLayoutNode,
   isRow: boolean,
@@ -871,6 +895,71 @@ export function solveLayout(
         return { usedWidth, height: child.measureContent(usedWidth).height };
       };
 
+      // Used cross-box content size a ratio item transfers its main size
+      // from: an explicit cross size, or the stretched cross of a single-line
+      // container with a definite cross size (stretch counts as definite
+      // pre-layout, spec 9.8). Undefined when neither applies.
+      const ratioCrossContent = (
+        child: NormalizedLayoutNode,
+        childModel: ResolvedBoxModel,
+      ): number | undefined => {
+        if (!child.aspectRatio) return undefined;
+        const crossProp: "width" | "height" = isRow ? "height" : "width";
+        const crossPB = isRow
+          ? childModel.paddingTop +
+            childModel.paddingBottom +
+            childModel.borderTop +
+            childModel.borderBottom
+          : childModel.paddingLeft +
+            childModel.paddingRight +
+            childModel.borderLeft +
+            childModel.borderRight;
+        if (typeof child[crossProp] === "number") {
+          return clampCrossContent(
+            child,
+            isRow ? childModel.contentHeight : childModel.contentWidth,
+            crossPB,
+            isRow,
+          );
+        }
+        const isWrap =
+          node.flexWrap === "wrap" || node.flexWrap === "wrap-reverse";
+        const align =
+          (child.alignSelf && child.alignSelf !== "auto"
+            ? child.alignSelf
+            : node.alignItems) ?? "stretch";
+        const containerCrossDefinite = isRow
+          ? typeof node.height === "number" ||
+            (parentResolvedDims.get(node.id)?.has("height") ?? false)
+          : typeof node.width === "number" ||
+            (parentResolvedDims.get(node.id)?.has("width") ?? false);
+        const crossMarginsAuto = isRow
+          ? child.margin.top === "auto" || child.margin.bottom === "auto"
+          : child.margin.left === "auto" || child.margin.right === "auto";
+        if (
+          isWrap ||
+          align !== "stretch" ||
+          !containerCrossDefinite ||
+          crossMarginsAuto
+        ) {
+          // No definite or stretched cross: empty content, still subject to
+          // the item's explicit cross min/max before the transfer.
+          return clampCrossContent(child, 0, crossPB, isRow);
+        }
+        const crossMargin = isRow
+          ? childModel.marginTop + childModel.marginBottom
+          : childModel.marginLeft + childModel.marginRight;
+        const containerCross = isRow
+          ? parentModel.contentHeight
+          : parentModel.contentWidth;
+        return clampCrossContent(
+          child,
+          Math.max(0, containerCross - crossMargin - crossPB),
+          crossPB,
+          isRow,
+        );
+      };
+
       // Phase 3: Determine hypothetical main sizes
       const hypoMainSizes = new Map<string, number>();
       for (const childId of itemOrder) {
@@ -888,7 +977,22 @@ export function solveLayout(
             childModel.borderTop +
             childModel.borderBottom;
         let mainSize: number;
-        if (
+        const ratioApplies =
+          child.aspectRatio !== undefined &&
+          typeof child.flexBasis !== "number" &&
+          typeof child[mainDim] !== "number";
+        if (ratioApplies) {
+          // With no definite or stretched cross size, the intrinsic main size
+          // transfers from the cross axis's empty content (padding+border
+          // only, for border-box) — probe-verified.
+          mainSize =
+            transferRatioContent(
+              child,
+              childModel,
+              isRow ? "height" : "width",
+              ratioCrossContent(child, childModel) ?? 0,
+            ) + pb;
+        } else if (
           (child.display === "flex" || child.display === "grid") &&
           typeof child.flexBasis !== "number" &&
           typeof child[mainDim] !== "number"
@@ -1077,11 +1181,22 @@ export function solveLayout(
           // Content-box flex base size (spec 9.2 step 3)
           let flexBaseSize: number;
           const mainDimProp: "width" | "height" = isRow ? "width" : "height";
+          const ratioAppliesForBase =
+            child.aspectRatio !== undefined &&
+            typeof child.flexBasis !== "number" &&
+            typeof child[mainDimProp] !== "number";
           if (typeof child.flexBasis === "number") {
             flexBaseSize =
               child.boxSizing === "border-box"
                 ? Math.max(0, child.flexBasis - paddingBorder)
                 : child.flexBasis;
+          } else if (ratioAppliesForBase) {
+            flexBaseSize = transferRatioContent(
+              child,
+              childModel,
+              isRow ? "height" : "width",
+              ratioCrossContent(child, childModel) ?? 0,
+            );
           } else if (
             (child.display === "flex" || child.display === "grid") &&
             typeof child[mainDimProp] !== "number"
@@ -1135,7 +1250,7 @@ export function solveLayout(
             } else if (child.display === "flex" || child.display === "grid") {
               // An empty flex item has no content, so its min-content is 0
               // (min-width:auto lets it shrink to nothing).
-              const contentMin =
+              let contentMin =
                 collectFlexItems(child).length === 0
                   ? 0
                   : computeIntrinsicContentSize(
@@ -1172,7 +1287,7 @@ export function solveLayout(
                   ? Math.max(0, child.minHeight - paddingBorder)
                   : child.minHeight;
             } else if (child.display === "flex" || child.display === "grid") {
-              const contentMin =
+              let contentMin =
                 collectFlexItems(child).length === 0
                   ? 0
                   : computeIntrinsicContentSize(
@@ -1214,6 +1329,30 @@ export function solveLayout(
                 child.boxSizing === "border-box"
                   ? Math.max(0, child.maxHeight - paddingBorder)
                   : child.maxHeight;
+            }
+          }
+          // A ratio item's automatic minimum floors at the transferred size
+          // (probe-verified: it refuses to shrink below the ratio-derived
+          // main size); a specified main size caps that floor.
+          const explicitMin = isRow ? child.minWidth : child.minHeight;
+          if (child.aspectRatio !== undefined && explicitMin === undefined) {
+            let floor = transferRatioContent(
+              child,
+              childModel,
+              isRow ? "height" : "width",
+              ratioCrossContent(child, childModel) ?? 0,
+            );
+            const specified = isRow ? child.width : child.height;
+            if (typeof specified === "number") {
+              const specContent =
+                child.boxSizing === "border-box"
+                  ? Math.max(0, specified - paddingBorder)
+                  : specified;
+              floor = Math.min(specContent, floor);
+            }
+            if (floor > minContent) {
+              minContent = floor;
+              autoMinFromContent = true;
             }
           }
           if (maxContent < minContent) {
@@ -1625,6 +1764,33 @@ export function solveLayout(
         }
       }
 
+      // Phase 5.5a3: Resolve aspect-ratio cross sizes from the used main size
+      // so line cross sizing sees the transferred extent; stretch overrides
+      // later in Phase 6.
+      for (const line of lines) {
+        for (const childId of line.itemIds) {
+          const child = nodeMap.get(childId)!;
+          if (!child.aspectRatio) continue;
+          const crossProp: "width" | "height" = isRow ? "height" : "width";
+          if (typeof child[crossProp] === "number") continue;
+          const childModel = boxModelMap.get(childId)!;
+          const usedMain = isRow
+            ? childModel.contentWidth
+            : childModel.contentHeight;
+          const transferred = transferRatioContent(
+            child,
+            childModel,
+            isRow ? "width" : "height",
+            usedMain,
+          );
+          if (isRow) {
+            childModel.contentHeight = transferred;
+          } else {
+            childModel.contentWidth = transferred;
+          }
+        }
+      }
+
       // Phase 5.5b: Compute per-line cross sizes and align-content
       const containerCrossSize = isRow
         ? parentModel.contentHeight
@@ -2001,8 +2167,99 @@ export function solveLayout(
           gridItemJustify(child, node) === "stretch" &&
           child.margin.left !== "auto" &&
           child.margin.right !== "auto";
+        const vPB =
+          cm.paddingTop + cm.paddingBottom + cm.borderTop + cm.borderBottom;
+        // Ratio items distinguish explicit stretch (justifySelf/justifyItems
+        // "stretch": fills the track, distorting the ratio) from normal
+        // (unspecified: preserves the ratio — transfers from a definite or
+        // explicitly-stretched block axis, and fills the track only when
+        // nothing else is definite). Probe-verified.
+        const justifyVal =
+          child.justifySelf && child.justifySelf !== "auto"
+            ? child.justifySelf
+            : node.justifyItems;
+        const alignVal =
+          child.alignSelf && child.alignSelf !== "auto"
+            ? child.alignSelf
+            : node.alignItems;
+        const noHMarginAuto =
+          child.margin.left !== "auto" && child.margin.right !== "auto";
+        const noVMarginAuto =
+          child.margin.top !== "auto" && child.margin.bottom !== "auto";
+        const justifyExplicitStretch =
+          justifyVal === "stretch" && noHMarginAuto;
+        const alignExplicitStretch = alignVal === "stretch" && noVMarginAuto;
         let content: number;
-        if (canStretch) {
+        if (child.aspectRatio) {
+          if (justifyExplicitStretch) {
+            content = Math.max(
+              0,
+              areaWidth - cm.marginLeft - cm.marginRight - hPB,
+            );
+          } else if (typeof child.height === "number") {
+            content = transferRatioContent(
+              child,
+              cm,
+              "height",
+              clampCrossContent(child, cm.contentHeight, vPB, true),
+            );
+          } else if (
+            alignExplicitStretch ||
+            (alignVal === undefined &&
+              noVMarginAuto &&
+              justifyVal !== undefined)
+          ) {
+            // Block axis fills (explicit stretch, or normal block paired
+            // with an explicitly aligned inline axis); inline transfers.
+            let fixedSpan: number | undefined = 0;
+            for (let i = p.rowStart; i < p.rowEnd; i++) {
+              const t = rowTrackList[i];
+              if (typeof t !== "number") {
+                fixedSpan = undefined;
+                break;
+              }
+              fixedSpan += t;
+            }
+            if (fixedSpan !== undefined) {
+              fixedSpan += rowGap * (p.rowEnd - p.rowStart - 1);
+              const blockContent = clampCrossContent(
+                child,
+                Math.max(0, fixedSpan - cm.marginTop - cm.marginBottom - vPB),
+                vPB,
+                true,
+              );
+              content = transferRatioContent(child, cm, "height", blockContent);
+            } else {
+              content = transferRatioContent(
+                child,
+                cm,
+                "height",
+                clampCrossContent(child, 0, vPB, true),
+              );
+            }
+          } else if (justifyVal === undefined && noHMarginAuto) {
+            // Normal stretch floors at the ratio box's intrinsic inline size
+            // (transferred from empty block content); explicit stretch does
+            // not.
+            content = Math.max(
+              0,
+              areaWidth - cm.marginLeft - cm.marginRight - hPB,
+              transferRatioContent(
+                child,
+                cm,
+                "height",
+                clampCrossContent(child, 0, vPB, true),
+              ),
+            );
+          } else {
+            content = transferRatioContent(
+              child,
+              cm,
+              "height",
+              clampCrossContent(child, 0, vPB, true),
+            );
+          }
+        } else if (canStretch) {
           content = Math.max(0, areaWidth - cm.marginLeft - cm.marginRight - hPB);
         } else {
           const maxContent = computeIntrinsicContentSize(
@@ -2059,6 +2316,8 @@ export function solveLayout(
           minH = maxH = cm.contentHeight;
         } else if (child.measureContent && child.children.length === 0) {
           minH = maxH = child.measureContent(cm.contentWidth).height;
+        } else if (child.aspectRatio && child.children.length === 0) {
+          minH = maxH = transferRatioContent(child, cm, "width", cm.contentWidth);
         } else if (child.children.length > 0) {
           minH = maxH = computeIntrinsicContentSize(
             child,
@@ -2153,7 +2412,16 @@ export function solveLayout(
           child.margin.top !== "auto" &&
           child.margin.bottom !== "auto";
         let content: number;
-        if (canStretch) {
+        const blockAlignVal =
+          child.alignSelf && child.alignSelf !== "auto"
+            ? child.alignSelf
+            : node.alignItems;
+        if (
+          child.aspectRatio &&
+          !(blockAlignVal === "stretch" && canStretch)
+        ) {
+          content = transferRatioContent(child, cm, "width", cm.contentWidth);
+        } else if (canStretch) {
           content = Math.max(0, areaHeight - cm.marginTop - cm.marginBottom - vPB);
         } else if (child.measureContent && child.children.length === 0) {
           content = child.measureContent(cm.contentWidth).height;

@@ -60,6 +60,8 @@ export interface LayoutNode {
   maxWidth?: number;
   minHeight?: number;
   maxHeight?: number;
+  /** width / height. Applies to the box selected by `boxSizing`. */
+  aspectRatio?: number;
   padding?: BoxSidesInput;
   margin?: MarginSidesInput;
   border?: BoxSidesInput;
@@ -137,6 +139,7 @@ export interface NormalizedLayoutNode {
   maxWidth?: number;
   minHeight?: number;
   maxHeight?: number;
+  aspectRatio?: number;
   padding: BoxSides;
   margin: MarginBoxSides;
   border: BoxSides;

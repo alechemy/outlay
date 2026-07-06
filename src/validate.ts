@@ -61,6 +61,7 @@ const KNOWN_KEYS = new Set([
   "maxWidth",
   "minHeight",
   "maxHeight",
+  "aspectRatio",
   "padding",
   "margin",
   "border",
@@ -169,6 +170,13 @@ function visit(
   }
   if (isFiniteNumber(node.flexShrink) && node.flexShrink < 0) {
     err(`"flexShrink" must be >= 0`);
+  }
+  if (node.aspectRatio !== undefined) {
+    if (!isFiniteNumber(node.aspectRatio) || node.aspectRatio <= 0) {
+      err(
+        `"aspectRatio" must be a positive finite number, got ${describe(node.aspectRatio)}`,
+      );
+    }
   }
 
   checkBoxSides(node.padding, "padding", false, err);
