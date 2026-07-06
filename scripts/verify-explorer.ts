@@ -99,10 +99,15 @@ async function setSlider(page: Page, prop: string, value: number): Promise<void>
   );
 }
 
-// The width/height rows have both a mode select (auto/fixed) and a slider.
-async function setSizeFixed(page: Page, prop: string, value: number): Promise<void> {
+// The width/height rows have a mode select (auto/px/%/keywords) and a slider.
+async function setSizeMode(
+  page: Page,
+  prop: string,
+  mode: string,
+  value?: number,
+): Promise<void> {
   await page.evaluate(
-    (p: string, v: number) => {
+    (p: string, m: string, v: number | null) => {
       const row = [...document.querySelectorAll<HTMLElement>("#props .prop-row")].find(
         (r) => r.querySelector("label")?.textContent === p,
       );
@@ -113,14 +118,19 @@ async function setSizeFixed(page: Page, prop: string, value: number): Promise<vo
         HTMLInputElement.prototype,
         "value",
       )!.set!;
-      setter.call(slider, String(v));
-      select.value = "fixed";
+      if (v !== null) setter.call(slider, String(v));
+      select.value = m;
       select.dispatchEvent(new Event("change", { bubbles: true }));
-      slider.dispatchEvent(new Event("input", { bubbles: true }));
+      if (v !== null) slider.dispatchEvent(new Event("input", { bubbles: true }));
     },
     prop,
-    value,
+    mode,
+    value ?? null,
   );
+}
+
+async function setSizeFixed(page: Page, prop: string, value: number): Promise<void> {
+  await setSizeMode(page, prop, "px", value);
 }
 
 async function setText(page: Page, prop: string, value: string): Promise<void> {
@@ -353,6 +363,72 @@ async function main() {
     await setText(page, "gridTemplateColumns", "repeat(auto-fill, minmax(100px, 1fr))");
     await setText(page, "gridTemplateRows", "80px");
     await check("repeat(auto-fill, minmax(100px, 1fr))");
+
+    console.log("Scenario: flex alignContent space-evenly");
+    await reloadClean();
+    await setSizeFixed(page, "width", 420);
+    await setSizeFixed(page, "height", 300);
+    await setSelect(page, "flexWrap", "wrap");
+    for (const id of ["node-2", "node-3", "node-4"]) {
+      await selectTreeNode(page, id);
+      await setSlider(page, "flexGrow", 0);
+      await setSizeFixed(page, "width", 150);
+      await setSizeFixed(page, "height", 60);
+    }
+    await selectTreeNode(page, "node-1");
+    await setSelect(page, "alignContent", "space-evenly");
+    await check("flex wrap + alignContent: space-evenly");
+    await setSelect(page, "alignContent", "space-between");
+    await check("flex wrap + alignContent: space-between");
+
+    console.log("Scenario: aspect ratio");
+    await setSelect(page, "alignContent", "stretch");
+    await selectTreeNode(page, "node-2");
+    await setSizeMode(page, "width", "auto");
+    await setSelect(page, "aspectRatio", "2");
+    await check("aspectRatio 2 with definite height (width transfers)");
+    await setSelect(page, "aspectRatio", "0.5");
+    await check("aspectRatio 0.5 with definite height");
+
+    console.log("Scenario: percentages");
+    await selectTreeNode(page, "node-3");
+    await setSizeMode(page, "width", "%", 50);
+    await check("width: 50% of the container");
+    await selectTreeNode(page, "node-4");
+    await setText(page, "flexBasis", "30%");
+    await check("flexBasis: 30%");
+
+    console.log("Scenario: keyword min/max and fit-content");
+    await selectTreeNode(page, "node-2");
+    await setSelect(page, "aspectRatio", "0");
+    await addChildToSelected(page);
+    await addChildToSelected(page);
+    await setSlider(page, "flexGrow", 5);
+    await setText(page, "maxWidth", "max-content");
+    await check("flexGrow 5 capped by maxWidth: max-content");
+    await setText(page, "maxWidth", "");
+    await setSizeMode(page, "width", "fit-content");
+    await setSlider(page, "flexGrow", 0);
+    await check("width: fit-content on a nested container");
+
+    console.log("Scenario: grid fit-content track + space-evenly");
+    await reloadClean();
+    await setSelect(page, "display", "grid");
+    await setSizeFixed(page, "width", 480);
+    await setSizeFixed(page, "height", 320);
+    await setText(page, "gridTemplateColumns", "fit-content(160px) 1fr");
+    await setText(page, "gridTemplateRows", "60px 60px");
+    for (const id of ["node-2", "node-3", "node-4"]) {
+      await selectTreeNode(page, id);
+      await setSizeFixed(page, "width", 120);
+      await setSizeFixed(page, "height", 40);
+    }
+    await selectTreeNode(page, "node-1");
+    await check("fit-content(160px) column sized by contents");
+    await setText(page, "gridTemplateColumns", "fit-content(60px) 1fr");
+    await check("fit-content(60px) floored at min-content");
+    await setSelect(page, "alignContent", "space-evenly");
+    await check("grid alignContent: space-evenly");
 
     await page.screenshot({
       path: path.join(SHOT_DIR, "final.png") as `${string}.png`,

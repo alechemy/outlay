@@ -18,13 +18,19 @@ function colorForDepth(depth: number): string {
 interface TreeNode {
   id: string;
   props: {
-    width: number | "auto";
-    height: number | "auto";
+    width: number | "auto" | "min-content" | "max-content" | "fit-content" | `${number}%`;
+    height: number | "auto" | "min-content" | "max-content" | "fit-content" | `${number}%`;
+    aspectRatio: number;
+    minWidth: string;
+    maxWidth: string;
+    minHeight: string;
+    maxHeight: string;
+    flexBasis: string;
     display: "flex" | "grid";
     flexDirection: "row" | "column" | "row-reverse" | "column-reverse";
     justifyContent: "flex-start" | "flex-end" | "center" | "space-between" | "space-around" | "space-evenly";
     alignItems: "flex-start" | "flex-end" | "center" | "stretch" | "baseline";
-    alignContent: "flex-start" | "flex-end" | "center" | "stretch" | "space-between" | "space-around";
+    alignContent: "flex-start" | "flex-end" | "center" | "stretch" | "space-between" | "space-around" | "space-evenly";
     flexWrap: "nowrap" | "wrap" | "wrap-reverse";
     gap: number;
     flexGrow: number;
@@ -54,6 +60,12 @@ function createNode(overrides?: Partial<TreeNode["props"]>): TreeNode {
     props: {
       width: "auto",
       height: "auto",
+      aspectRatio: 0,
+      minWidth: "",
+      maxWidth: "",
+      minHeight: "",
+      maxHeight: "",
+      flexBasis: "",
       display: "flex",
       flexDirection: "row",
       justifyContent: "flex-start",
@@ -183,6 +195,11 @@ function parseTrackScalar(token: string): TrackSize {
   if (/^[\d.]+fr$/.test(t)) return t as `${number}fr`;
   if (/^[\d.]+px$/.test(t)) return parseFloat(t);
   if (/^[\d.]+$/.test(t)) return parseFloat(t);
+  if (t.startsWith("fit-content(") && t.endsWith(")")) {
+    const inner = t.slice("fit-content(".length, -1).trim();
+    if (/^[\d.]+(px)?$/.test(inner)) return { fitContent: parseFloat(inner) };
+    return "auto";
+  }
   if (t.startsWith("minmax(") && t.endsWith(")")) {
     const [min, max] = splitCommaTopLevel(t.slice("minmax(".length, -1));
     return {
@@ -251,6 +268,21 @@ function toLayoutNode(node: TreeNode, parentDisplay?: "flex" | "grid"): LayoutNo
   };
   if (p.width !== "auto") ln.width = p.width;
   if (p.height !== "auto") ln.height = p.height;
+  if (p.aspectRatio > 0) ln.aspectRatio = p.aspectRatio;
+  const minMax = (raw: string): number | "min-content" | "max-content" | undefined => {
+    const t = raw.trim();
+    if (t === "min-content" || t === "max-content") return t;
+    if (/^[\d.]+$/.test(t)) return parseFloat(t);
+    return undefined;
+  };
+  const mw = minMax(p.minWidth);
+  const Mw = minMax(p.maxWidth);
+  const mh = minMax(p.minHeight);
+  const Mh = minMax(p.maxHeight);
+  if (mw !== undefined) ln.minWidth = mw;
+  if (Mw !== undefined) ln.maxWidth = Mw;
+  if (mh !== undefined) ln.minHeight = mh;
+  if (Mh !== undefined) ln.maxHeight = Mh;
   if (p.gap) ln.gap = p.gap;
 
   if (p.display === "flex") {
@@ -258,6 +290,7 @@ function toLayoutNode(node: TreeNode, parentDisplay?: "flex" | "grid"): LayoutNo
     ln.justifyContent = p.justifyContent;
     ln.alignItems = p.alignItems;
     ln.flexWrap = p.flexWrap;
+    if (p.flexWrap !== "nowrap") ln.alignContent = p.alignContent;
   } else {
     const cols = parseTrackList(p.gridTemplateColumns);
     const rows = parseTrackList(p.gridTemplateRows);
@@ -280,6 +313,9 @@ function toLayoutNode(node: TreeNode, parentDisplay?: "flex" | "grid"): LayoutNo
   } else if (parentDisplay === "flex") {
     ln.flexGrow = p.flexGrow;
     ln.flexShrink = p.flexShrink;
+    const basis = p.flexBasis.trim();
+    if (/^[\d.]+$/.test(basis)) ln.flexBasis = parseFloat(basis);
+    else if (/^[\d.]+%$/.test(basis)) ln.flexBasis = basis as `${number}%`;
     if (p.alignSelf !== "auto") ln.alignSelf = p.alignSelf;
   }
   return ln;
@@ -366,11 +402,21 @@ function refStyleDecls(ln: LayoutNode): string[] {
   d.push(`padding: ${ln.padding ?? 0}px`);
   if (ln.gap !== undefined) d.push(`gap: ${ln.gap}px`);
 
+  if (ln.aspectRatio !== undefined) d.push(`aspect-ratio: ${ln.aspectRatio}`);
+  const mm = (v: number | string) => (typeof v === "number" ? `${v}px` : v);
+  if (ln.minWidth !== undefined) d.push(`min-width: ${mm(ln.minWidth)}`);
+  if (ln.maxWidth !== undefined) d.push(`max-width: ${mm(ln.maxWidth)}`);
+  if (ln.minHeight !== undefined) d.push(`min-height: ${mm(ln.minHeight)}`);
+  if (ln.maxHeight !== undefined) d.push(`max-height: ${mm(ln.maxHeight)}`);
+  if (ln.flexBasis !== undefined)
+    d.push(`flex-basis: ${typeof ln.flexBasis === "number" ? ln.flexBasis + "px" : ln.flexBasis}`);
+
   if (ln.display === "flex") {
     if (ln.flexDirection) d.push(`flex-direction: ${ln.flexDirection}`);
     if (ln.flexWrap) d.push(`flex-wrap: ${ln.flexWrap}`);
     if (ln.justifyContent) d.push(`justify-content: ${ln.justifyContent}`);
     if (ln.alignItems) d.push(`align-items: ${ln.alignItems}`);
+    if (ln.alignContent) d.push(`align-content: ${ln.alignContent}`);
   } else if (ln.display === "grid") {
     if (ln.justifyContent) d.push(`justify-content: ${ln.justifyContent}`);
     if (ln.alignItems) d.push(`align-items: ${ln.alignItems}`);
@@ -563,6 +609,11 @@ function renderProps() {
   addSelectRow(panel, "display", node, ["flex", "grid"]);
   addSizeRow(panel, "width", node);
   addSizeRow(panel, "height", node);
+  addAspectRatioRow(panel, node);
+  addTextRow(panel, "minWidth", node, "px | min-content | max-content", ["min-content", "max-content", "120"]);
+  addTextRow(panel, "maxWidth", node, "px | min-content | max-content", ["min-content", "max-content", "240"]);
+  addTextRow(panel, "minHeight", node, "px | min-content | max-content", ["min-content", "max-content", "60"]);
+  addTextRow(panel, "maxHeight", node, "px | min-content | max-content", ["min-content", "max-content", "180"]);
   addSliderRow(panel, "padding", node, 0, 40, 1);
   addSliderRow(panel, "gap", node, 0, 40, 1);
 
@@ -573,6 +624,7 @@ function renderProps() {
       "repeat(2, 120px)",
       "repeat(auto-fill, minmax(100px, 1fr))",
       "minmax(80px, 1fr) auto 1fr",
+      "fit-content(160px) 1fr",
     ]);
     addTextRow(panel, "gridTemplateRows", node, "e.g. 80px auto", [
       "80px 80px",
@@ -585,7 +637,7 @@ function renderProps() {
       "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly",
     ]);
     addSelectRow(panel, "alignContent", node, [
-      "stretch", "flex-start", "flex-end", "center", "space-between", "space-around",
+      "stretch", "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly",
     ]);
     addSelectRow(panel, "alignItems", node, ["stretch", "flex-start", "flex-end", "center", "baseline"]);
   } else {
@@ -595,6 +647,11 @@ function renderProps() {
     ]);
     addSelectRow(panel, "alignItems", node, ["stretch", "flex-start", "flex-end", "center", "baseline"]);
     addSelectRow(panel, "flexWrap", node, ["nowrap", "wrap", "wrap-reverse"]);
+    if (node.props.flexWrap !== "nowrap") {
+      addSelectRow(panel, "alignContent", node, [
+        "stretch", "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly",
+      ]);
+    }
   }
 
   if (!isRoot) {
@@ -606,6 +663,7 @@ function renderProps() {
     } else {
       addSliderRow(panel, "flexGrow", node, 0, 10, 1);
       addSliderRow(panel, "flexShrink", node, 0, 10, 1);
+      addTextRow(panel, "flexBasis", node, "auto | px | %", ["120", "30%", "50%"]);
     }
   }
 
@@ -638,6 +696,32 @@ function renderProps() {
   }
 
   panel.appendChild(actions);
+}
+
+function addAspectRatioRow(panel: HTMLElement, node: TreeNode) {
+  const row = document.createElement("div");
+  row.className = "prop-row";
+  const label = document.createElement("label");
+  label.textContent = "aspectRatio";
+  row.appendChild(label);
+  const select = document.createElement("select");
+  const options: [string, number][] = [
+    ["none", 0], ["1 / 2", 0.5], ["3 / 4", 0.75], ["1 / 1", 1],
+    ["4 / 3", 4 / 3], ["3 / 2", 1.5], ["16 / 9", 16 / 9], ["2 / 1", 2],
+  ];
+  for (const [text, value] of options) {
+    const o = document.createElement("option");
+    o.value = String(value);
+    o.textContent = text;
+    if (node.props.aspectRatio === value) o.selected = true;
+    select.appendChild(o);
+  }
+  select.addEventListener("change", () => {
+    node.props.aspectRatio = Number(select.value);
+    solveAndRender();
+  });
+  row.appendChild(select);
+  panel.appendChild(row);
 }
 
 function addSliderRow(
@@ -700,7 +784,7 @@ function addSelectRow(
   }
   select.addEventListener("change", () => {
     (node.props as any)[prop] = select.value;
-    if (prop === "display") update();
+    if (prop === "display" || prop === "flexWrap") update();
     else solveAndRender();
   });
 
@@ -759,54 +843,67 @@ function addSizeRow(panel: HTMLElement, prop: "width" | "height", node: TreeNode
   label.textContent = prop;
   row.appendChild(label);
 
-  const isAuto = node.props[prop] === "auto";
+  const current = node.props[prop];
+  const mode =
+    current === "auto" || current === "min-content" ||
+    current === "max-content" || current === "fit-content"
+      ? current
+      : typeof current === "string"
+        ? "%"
+        : "px";
 
   const select = document.createElement("select");
-  const autoOpt = document.createElement("option");
-  autoOpt.value = "auto";
-  autoOpt.textContent = "auto";
-  if (isAuto) autoOpt.selected = true;
-  select.appendChild(autoOpt);
-
-  const fixedOpt = document.createElement("option");
-  fixedOpt.value = "fixed";
-  fixedOpt.textContent = "fixed";
-  if (!isAuto) fixedOpt.selected = true;
-  select.appendChild(fixedOpt);
-  select.style.width = "60px";
+  for (const opt of ["auto", "px", "%", "min-content", "max-content", "fit-content"]) {
+    const o = document.createElement("option");
+    o.value = opt;
+    o.textContent = opt;
+    if (opt === mode) o.selected = true;
+    select.appendChild(o);
+  }
+  select.style.width = "104px";
   select.style.flex = "none";
 
   const slider = document.createElement("input");
   slider.type = "range";
-  slider.min = "20";
-  slider.max = prop === "width" ? "800" : "600";
   slider.step = "1";
-  slider.value = isAuto ? "100" : String(node.props[prop]);
-  slider.disabled = isAuto;
+  const setSliderRange = (m: string) => {
+    slider.min = m === "%" ? "5" : "20";
+    slider.max = m === "%" ? "100" : prop === "width" ? "800" : "600";
+  };
+  setSliderRange(mode);
+  slider.value =
+    mode === "px"
+      ? String(current)
+      : mode === "%"
+        ? String(parseFloat(current as string))
+        : "100";
+  slider.disabled = mode !== "px" && mode !== "%";
   slider.style.flex = "1";
 
   const valSpan = document.createElement("span");
   valSpan.className = "value";
-  valSpan.textContent = isAuto ? "auto" : String(node.props[prop]);
+  valSpan.textContent = String(current);
+
+  const apply = () => {
+    const m = select.value;
+    if (m === "px") {
+      node.props[prop] = Number(slider.value);
+    } else if (m === "%") {
+      node.props[prop] = `${Number(slider.value)}%` as `${number}%`;
+    } else {
+      node.props[prop] = m as TreeNode["props"][typeof prop];
+    }
+    valSpan.textContent = String(node.props[prop]);
+    slider.disabled = m !== "px" && m !== "%";
+    solveAndRender();
+  };
 
   select.addEventListener("change", () => {
-    if (select.value === "auto") {
-      node.props[prop] = "auto";
-      slider.disabled = true;
-      valSpan.textContent = "auto";
-    } else {
-      node.props[prop] = Number(slider.value);
-      slider.disabled = false;
-      valSpan.textContent = slider.value;
-    }
-    solveAndRender();
+    setSliderRange(select.value);
+    if (select.value === "%" && Number(slider.value) > 100) slider.value = "50";
+    apply();
   });
-
-  slider.addEventListener("input", () => {
-    node.props[prop] = Number(slider.value);
-    valSpan.textContent = slider.value;
-    solveAndRender();
-  });
+  slider.addEventListener("input", apply);
 
   row.appendChild(label);
   row.appendChild(select);
