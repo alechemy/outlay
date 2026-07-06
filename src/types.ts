@@ -213,10 +213,15 @@ export interface LayoutResult {
   boxes: Map<string, ResolvedBox>;
   /** The same boxes keyed by the original input node references. */
   nodes: Map<LayoutNode, ResolvedBox>;
+  /** Scrollable extent: the union of all border boxes (e.g. total content height for a virtual scroller). */
+  contentSize: { width: number; height: number };
 }
 
 export interface ResolvedBox {
   id: string;
+
+  /** Id of the input-tree parent; undefined for the root (absolute children still report their tree parent). */
+  parentId?: string;
 
   // Position relative to the root container's content box origin
   x: number;
@@ -236,6 +241,9 @@ export interface ResolvedBox {
   borderBoxHeight: number;
   outerWidth: number; // borderBoxWidth + margin.left + margin.right
   outerHeight: number;
+
+  /** Distance from the border-box top to the first baseline (bottom border edge for an empty box). */
+  baseline?: number;
 }
 
 export interface ResolvedBoxModel {
@@ -260,6 +268,18 @@ export interface FlexLineInfo {
   mainSize: number;
 }
 
+/** Per-container grid track sizing and item placement (mirrors the solver's internal grid layout). */
+export interface GridDebugInfo {
+  colSizes: number[];
+  rowSizes: number[];
+  colOffsets: number[];
+  rowOffsets: number[];
+  placements: Map<
+    string,
+    { colStart: number; colEnd: number; rowStart: number; rowEnd: number }
+  >;
+}
+
 export interface DebugTrace {
   // After resolveBoxModel
   resolvedBoxModels: Map<string, ResolvedBoxModel>;
@@ -279,6 +299,9 @@ export interface DebugTrace {
 
   // After resolveCrossSize
   resolvedCrossSizes: Map<string, number>;
+
+  // Per grid container: track sizes, offsets, and item placements
+  gridLayouts?: Map<string, GridDebugInfo>;
 
   // Final output
   boxes: Map<string, ResolvedBox>;

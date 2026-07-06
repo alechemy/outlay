@@ -145,6 +145,7 @@ function createTrace(): DebugTrace {
     resolvedMainSizes: new Map(),
     frozenItems: new Map(),
     resolvedCrossSizes: new Map(),
+    gridLayouts: new Map(),
     boxes: new Map(),
   };
 }
@@ -769,6 +770,7 @@ export function solveLayout(
   const result: LayoutResultWithTrace = {
     boxes: new Map<string, ResolvedBox>(),
     nodes: new Map<LayoutNode, ResolvedBox>(),
+    contentSize: { width: 0, height: 0 },
   };
 
   const nodeMap = new Map<string, NormalizedLayoutNode>();
@@ -2573,13 +2575,17 @@ export function solveLayout(
         node.alignContent,
         collapsedRows,
       );
-      containerGridLayouts.set(node.id, {
+      const gridLayout = {
         colSizes,
         rowSizes,
         colOffsets,
         rowOffsets,
         placements,
-      });
+      };
+      containerGridLayouts.set(node.id, gridLayout);
+      if (trace) {
+        trace.gridLayouts?.set(node.id, gridLayout);
+      }
 
       for (const child of gridItems) {
         const p = placements.get(child.id)!;
@@ -2659,7 +2665,11 @@ export function solveLayout(
   processNode(normalizedRoot);
 
   // Phase 7: Produce final boxes
-  function resolveAndEmitAbsolute(child: NormalizedLayoutNode, cb: ContainingBlockInfo) {
+  function resolveAndEmitAbsolute(
+    child: NormalizedLayoutNode,
+    cb: ContainingBlockInfo,
+    parentId?: string,
+  ) {
     const childModel = boxModelMap.get(child.id)!;
 
     const mL = child.margin.left === "auto" ? 0 : (child.margin.left as number);
@@ -2744,7 +2754,7 @@ export function solveLayout(
       childBorderBoxY = cb.paddingBoxY + mT;
     }
 
-    emitBoxes(child, childBorderBoxX, childBorderBoxY, cb);
+    emitBoxes(child, childBorderBoxX, childBorderBoxY, cb, parentId);
   }
 
   function emitBoxes(
@@ -2752,6 +2762,7 @@ export function solveLayout(
     borderBoxX: number,
     borderBoxY: number,
     inheritedCB: ContainingBlockInfo,
+    parentId?: string,
   ) {
     const model = boxModelMap.get(node.id)!;
     const borderBoxWidth =
@@ -2769,6 +2780,7 @@ export function solveLayout(
 
     const box: ResolvedBox = {
       id: node.id,
+      parentId,
       x: borderBoxX,
       y: borderBoxY,
       width: model.contentWidth,
@@ -2795,6 +2807,7 @@ export function solveLayout(
       borderBoxHeight,
       outerWidth: borderBoxWidth + model.marginLeft + model.marginRight,
       outerHeight: borderBoxHeight + model.marginTop + model.marginBottom,
+      baseline: computeBaselineOffset(node),
     };
 
     result.boxes.set(node.id, box);
@@ -3137,7 +3150,7 @@ export function solveLayout(
               mainMarginStart + mainBorderBox + mainMarginEnd + interItemGap + mainGap;
           }
 
-          emitBoxes(child, childBorderBoxX, childBorderBoxY, myCB);
+          emitBoxes(child, childBorderBoxX, childBorderBoxY, myCB, node.id);
         }
       }
     } else if (node.display === "grid") {
@@ -3239,6 +3252,7 @@ export function solveLayout(
             contentBoxX + areaX + offsetX,
             contentBoxY + areaY + offsetY,
             myCB,
+            node.id,
           );
         }
       }
@@ -3264,7 +3278,7 @@ export function solveLayout(
         currentMainPos +=
           childModel.marginTop + childBorderBoxHeight + childModel.marginBottom;
 
-        emitBoxes(child, childBorderBoxX, childBorderBoxY, myCB);
+        emitBoxes(child, childBorderBoxX, childBorderBoxY, myCB, node.id);
       }
     }
 
@@ -3274,7 +3288,7 @@ export function solveLayout(
       const childPos = child.position ?? "static";
       if (childPos !== "absolute" && childPos !== "fixed") continue;
       const cb = childPos === "fixed" ? rootContainingBlock : myCB;
-      resolveAndEmitAbsolute(child, cb);
+      resolveAndEmitAbsolute(child, cb, node.id);
     }
   }
 
@@ -3298,6 +3312,14 @@ export function solveLayout(
     const box = result.boxes.get(id);
     if (box) result.nodes.set(source, box);
   }
+
+  let extentWidth = 0;
+  let extentHeight = 0;
+  for (const box of result.boxes.values()) {
+    extentWidth = Math.max(extentWidth, box.x + box.borderBoxWidth);
+    extentHeight = Math.max(extentHeight, box.y + box.borderBoxHeight);
+  }
+  result.contentSize = { width: extentWidth, height: extentHeight };
 
   if (trace) {
     result.trace = trace;

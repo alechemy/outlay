@@ -64,6 +64,91 @@ function assert(cond: boolean, label: string) {
   assert(nodes.get(hidden) === undefined, "display:none node absent from nodes map");
 }
 
+// parentId: explicit and auto ids, root undefined
+{
+  const child: LayoutNode = { id: "kid", width: 50, height: 40 };
+  const tree: LayoutNode = { id: "root", width: 200, height: 100, children: [child] };
+  const { boxes, nodes } = solveLayout(tree);
+  assert(nodes.get(child)!.parentId === "root", "child reports explicit parent id");
+  assert(boxes.get("root")!.parentId === undefined, "root box has no parentId");
+}
+{
+  const child: LayoutNode = { width: 50, height: 40 };
+  const tree: LayoutNode = { width: 200, height: 100, children: [child] };
+  const { nodes } = solveLayout(tree);
+  const rootBox = nodes.get(tree)!;
+  const childBox = nodes.get(child)!;
+  assert(childBox.parentId === rootBox.id, "child reports auto-assigned parent id");
+}
+
+// parentId: absolutely positioned child still reports its tree parent
+{
+  const abs: LayoutNode = {
+    id: "abs",
+    position: "absolute",
+    left: 350,
+    width: 100,
+    height: 20,
+  };
+  const tree: LayoutNode = { id: "root", width: 400, height: 200, children: [abs] };
+  const { nodes } = solveLayout(tree);
+  assert(nodes.get(abs)!.parentId === "root", "absolute child reports tree parent");
+}
+
+// contentSize: in-flow union extent
+{
+  const tree: LayoutNode = {
+    width: 400,
+    height: 200,
+    children: [{ width: 100, height: 50 }, { flexGrow: 1, height: 50 }],
+  };
+  const { contentSize } = solveLayout(tree);
+  assert(contentSize.width === 400, "contentSize width equals root width");
+  assert(contentSize.height === 200, "contentSize height equals root height");
+}
+
+// contentSize: absolute child expands the extent past the root
+{
+  const abs: LayoutNode = {
+    position: "absolute",
+    left: 350,
+    width: 100,
+    height: 20,
+  };
+  const tree: LayoutNode = { width: 400, height: 200, children: [abs] };
+  const { contentSize } = solveLayout(tree);
+  assert(contentSize.width === 450, "contentSize width includes absolute overflow");
+}
+
+// baseline: empty leaf synthesizes the baseline at its bottom border edge
+{
+  const leaf: LayoutNode = { id: "leaf", width: 60, height: 40 };
+  const tree: LayoutNode = { id: "root", width: 200, height: 100, children: [leaf] };
+  const { boxes } = solveLayout(tree);
+  assert(boxes.get("leaf")!.baseline === 40, "empty leaf baseline is border-box height");
+}
+
+// gridLayouts: trace records per-container track sizing
+{
+  const tree: LayoutNode = {
+    id: "grid",
+    display: "grid",
+    width: 300,
+    height: 100,
+    gridTemplateColumns: [100, 200],
+    children: [{ width: 10, height: 10 }, { width: 10, height: 10 }],
+  };
+  const { trace } = solveLayout(tree, { debug: true });
+  const info = trace!.gridLayouts!.get("grid");
+  assert(
+    info !== undefined &&
+      info.colSizes.length === 2 &&
+      info.colSizes[0] === 100 &&
+      info.colSizes[1] === 200,
+    "gridLayouts colSizes match the template",
+  );
+}
+
 console.log(`\n--- API Tests ---`);
 console.log(`Passed: ${passed}`);
 console.log(`Failed: ${failed}`);
