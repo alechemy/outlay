@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0 — 2026-07-06
+
+- Percentage sizes: `"N%"` on `width`/`height`/`flexBasis` of flex children, resolved against the containing block's content box per box-sizing — including parents sized by the solver itself (flex-grown, stretched, and auto-main containers, where percentages re-resolve once the main size is determined, matching Chromium's cyclic behavior).
+- Keyword min/max sizes: `minWidth`/`maxWidth`/`minHeight`/`maxHeight` accept `"min-content"` and `"max-content"`.
+- `outlay/testing`: `sweep`, `assertNoOverlaps`, `overflowsX`/`overflowsY` — the README's layout-assertion helpers, now importable.
+- `relativeTo` and `hitTest` result utilities on the root entry.
+- Grid fixes: non-stretched grid items with content shrink-to-fit into their track instead of taking max-content; used inline sizes are clamped by the child's own min/max on every path.
+- New `validateTree` warnings for coverage boundaries: `order` on grid children, fit-content tracks inside `repeat()`, fit-content cross sizes in wrap containers, aspect-ratio items in implicit tracks, and percentage sizes on grid children or the root.
+- `GridDebugInfo` is exported; `main`/`types` fields and a `"./package.json"` export for legacy resolution.
+- Now verified against Chromium across 4,450 fixtures (35 tiers).
+
 ## 1.1.0 — 2026-07-05
 
 - `aspectRatio` on flex and grid items: transfer through the box-sizing box, transferred automatic minimums, and grid's normal-vs-explicit-stretch precedence, verified against Chromium (tier 32).
