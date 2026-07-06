@@ -132,6 +132,13 @@ function transferRatioContent(
   return from === "width" ? fromContent / r : fromContent * r;
 }
 
+/** Percentage fraction of a `${number}%` size string, else null. */
+function pctOf(v: unknown): number | null {
+  if (typeof v !== "string" || !v.endsWith("%")) return null;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n / 100 : null;
+}
+
 function resolveGaps(
   node: NormalizedLayoutNode,
   isRow: boolean,
@@ -974,6 +981,66 @@ export function solveLayout(
         return { usedWidth, height: child.measureContent(usedWidth).height };
       };
 
+      // Percentages resolve against the container's content box once that
+      // axis is definite; an indefinite axis leaves the percentage behaving
+      // as auto (main-axis percentages get a second chance after the
+      // container's auto main size is determined, spec 9.8).
+      const resolveChildPercents = (
+        dims: ("width" | "height")[],
+        basis: boolean,
+        force?: "width" | "height",
+      ) => {
+        for (const child of node.children) {
+          const cm = boxModelMap.get(child.id);
+          if (!cm) continue;
+          for (const dim of dims) {
+            const frac = pctOf(child[dim]);
+            if (frac === null) continue;
+            const definite =
+              dim === force ||
+              typeof node[dim] === "number" ||
+              (parentResolvedDims.get(node.id)?.has(dim) ?? false);
+            if (!definite) continue;
+            const base =
+              dim === "width"
+                ? parentModel.contentWidth
+                : parentModel.contentHeight;
+            const px = frac * base;
+            child[dim] = px;
+            const pb =
+              dim === "width"
+                ? cm.paddingLeft +
+                  cm.paddingRight +
+                  cm.borderLeft +
+                  cm.borderRight
+                : cm.paddingTop +
+                  cm.paddingBottom +
+                  cm.borderTop +
+                  cm.borderBottom;
+            const content =
+              child.boxSizing === "border-box" ? Math.max(0, px - pb) : px;
+            if (dim === "width") cm.contentWidth = content;
+            else cm.contentHeight = content;
+          }
+          if (basis) {
+            const frac = pctOf(child.flexBasis);
+            if (frac !== null) {
+              const mainDim: "width" | "height" = isRow ? "width" : "height";
+              const definite =
+                mainDim === force ||
+                typeof node[mainDim] === "number" ||
+                (parentResolvedDims.get(node.id)?.has(mainDim) ?? false);
+              if (definite) {
+                child.flexBasis =
+                  frac *
+                  (isRow ? parentModel.contentWidth : parentModel.contentHeight);
+              }
+            }
+          }
+        }
+      };
+      resolveChildPercents(["width", "height"], true);
+
       // Used cross-box content size a ratio item transfers its main size
       // from: an explicit cross size, or the stretched cross of a single-line
       // container with a definite cross size (stretch counts as definite
@@ -1041,7 +1108,7 @@ export function solveLayout(
 
       // Phase 3: Determine hypothetical main sizes
       const hypoMainSizes = new Map<string, number>();
-      for (const childId of itemOrder) {
+      const computeHypoMain = (childId: string): number => {
         const child = nodeMap.get(childId)!;
         const childModel = boxModelMap.get(childId)!;
 
@@ -1208,6 +1275,10 @@ export function solveLayout(
           mainSize = Math.max(mainSize, autoFloor);
         }
 
+        return mainSize;
+      };
+      for (const childId of itemOrder) {
+        const mainSize = computeHypoMain(childId);
         hypoMainSizes.set(childId, mainSize);
         if (trace) {
           trace.hypotheticalMainSizes.set(childId, mainSize);
@@ -1252,6 +1323,27 @@ export function solveLayout(
             } else {
               parentModel.contentHeight = totalHypoOuter;
             }
+          }
+        }
+      }
+
+      // The container's main size is now determined and therefore definite
+      // for percentage resolution (spec 9.8), even when it came from the
+      // children's own hypothetical sizes.
+      if (hasAutoMainSize) {
+        const mainDimName: "width" | "height" = isRow ? "width" : "height";
+        const pctChildren = node.children.filter(
+          (child) =>
+            pctOf(child[mainDimName]) !== null ||
+            pctOf(child.flexBasis) !== null,
+        );
+        if (pctChildren.length > 0) {
+          resolveChildPercents([mainDimName], true, mainDimName);
+          for (const child of pctChildren) {
+            if (!hypoMainSizes.has(child.id)) continue;
+            const m = computeHypoMain(child.id);
+            hypoMainSizes.set(child.id, m);
+            if (trace) trace.hypotheticalMainSizes.set(child.id, m);
           }
         }
       }

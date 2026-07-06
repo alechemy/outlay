@@ -79,6 +79,7 @@ let tier33Config: { category: number; dir: "row" | "column" } = {
   dir: "row",
 };
 let tier34Config = { category: 0 };
+let tier35Config = { category: 0 };
 
 const TEXT_FONT = "16px Arial";
 const TEXT_LINE_HEIGHT = 20;
@@ -2372,6 +2373,87 @@ function genNode(rng: RNG, depth: number, tier: number): GenNode {
       node.height = rng.nextRange(20, 60);
       node.flexShrink = rng.nextChoice([0, 0, 1]);
     }
+  } else if (tier === 35) {
+    const cat = tier35Config.category;
+    const genPct = (lo: number, hi: number): `${number}%` =>
+      `${rng.nextRange(lo, hi)}${rng.next() < 0.3 ? ".5" : ""}%` as `${number}%`;
+    if (depth === 2) {
+      node.display = "flex";
+      node.flexDirection = cat === 2 ? "column" : cat === 3 && rng.next() < 0.4 ? "column" : "row";
+      node.flexWrap = "nowrap";
+      node.width = rng.nextRange(300, 640);
+      node.height = rng.nextRange(220, 480);
+      if (rng.next() < 0.4) node.gap = genGap(rng);
+    } else if (depth === 1) {
+      node.display = "flex";
+      if (cat === 0 || cat === 3) {
+        node.flexDirection = "row";
+        if (rng.next() < 0.6) {
+          node.flexGrow = 1;
+          node.flexShrink = 1;
+        } else {
+          node.width = rng.nextRange(120, 220);
+        }
+      } else if (cat === 1) {
+        node.flexDirection = "row";
+        const mode = rng.next();
+        if (mode < 0.4) {
+          node.width = genPct(15, 60);
+        } else if (mode < 0.7) {
+          node.flexBasis = genPct(15, 60);
+          node.flexGrow = rng.nextChoice([0, 1]);
+          node.flexShrink = rng.nextChoice([0, 1]);
+        } else {
+          node.width = rng.nextRange(80, 160);
+        }
+        if (rng.next() < 0.3) node.height = genPct(30, 80);
+      } else {
+        node.flexDirection = "column";
+        if (rng.next() < 0.5) {
+          node.height = rng.nextRange(100, 220);
+        }
+        if (rng.next() < 0.4) node.width = rng.nextRange(90, 200);
+      }
+      if (rng.next() < 0.3) node.gap = genGap(rng);
+    } else {
+      if (cat === 2) {
+        const mode = rng.next();
+        if (mode < 0.5) {
+          node.height = genPct(20, 70);
+          if (rng.next() < 0.5) node.width = rng.nextRange(30, 70);
+        } else {
+          node.height = rng.nextRange(20, 70);
+          if (rng.next() < 0.3) node.width = genPct(20, 80);
+        }
+        node.flexShrink = rng.nextChoice([0, 1, 1]);
+        node.flexGrow = rng.nextChoice([0, 0, 1]);
+      } else {
+        const mode = rng.next();
+        if (mode < 0.35) {
+          node.width = genPct(15, 70);
+        } else if (mode < 0.6) {
+          node.flexBasis = genPct(15, 70);
+          node.flexGrow = rng.nextChoice([0, 1]);
+          node.flexShrink = rng.nextChoice([0, 1]);
+        } else {
+          node.width = rng.nextRange(30, 100);
+        }
+        if (rng.next() < 0.35) node.height = genPct(25, 80);
+        else if (rng.next() < 0.5) node.height = rng.nextRange(20, 70);
+        node.flexShrink = node.flexShrink ?? rng.nextChoice([0, 1, 1]);
+        if (cat === 3) {
+          if (rng.next() < 0.4) {
+            const p = rng.nextRange(2, 14);
+            node.padding = { top: p, right: p, bottom: p, left: p };
+          }
+          if (rng.next() < 0.3) {
+            const b = rng.nextRange(1, 5);
+            node.border = { top: b, right: b, bottom: b, left: b };
+          }
+          node.boxSizing = rng.next() < 0.5 ? "border-box" : "content-box";
+        }
+      }
+    }
   }
 
   if (depth > 0 && !isLeaf) {
@@ -2456,6 +2538,10 @@ function genNode(rng: RNG, depth: number, tier: number): GenNode {
                       ? depth === 2
                         ? rng.nextRange(2, 3)
                         : rng.nextRange(2, 5)
+                    : tier === 35
+                      ? depth === 2
+                        ? rng.nextRange(2, 3)
+                        : rng.nextRange(2, 4)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -2665,6 +2751,9 @@ async function generateFixtures(
     if (tier === 34) {
       tier34Config.category = i % 4;
     }
+    if (tier === 35) {
+      tier35Config.category = i % 4;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -2694,7 +2783,7 @@ async function generateFixtures(
                 tier === 32
               ? 1
             : tier === 23 || tier === 28 || tier === 29 || tier === 30 ||
-                tier === 33 || tier === 34
+                tier === 33 || tier === 34 || tier === 35
               ? 2
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||

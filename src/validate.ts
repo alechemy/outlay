@@ -177,7 +177,7 @@ function visit(
       v !== "max-content"
     ) {
       err(
-        `"${prop}" must be a finite number, "min-content", or "max-content", got ${describe(v)}`,
+        `"${prop}" must be a finite number, "min-content", or "max-content", got ${describe(v)}${percentageHint(v)}`,
       );
     }
   }
@@ -213,11 +213,22 @@ function visit(
     flexBasis !== undefined &&
     !isFiniteNumber(flexBasis) &&
     flexBasis !== "auto" &&
-    flexBasis !== "content"
+    flexBasis !== "content" &&
+    !isPercentString(flexBasis)
   ) {
     err(
-      `"flexBasis" must be a finite number, "auto", or "content", got ${describe(flexBasis)}${percentageHint(flexBasis)}`,
+      `"flexBasis" must be a finite number, "auto", "content", or a percentage, got ${describe(flexBasis)}${percentageHint(flexBasis)}`,
     );
+  }
+
+  if (path === "root") {
+    for (const prop of ["width", "height", "flexBasis"] as const) {
+      if (isPercentString(node[prop])) {
+        warn(
+          `percentage "${prop}" on the root has no containing block and is treated as auto`,
+        );
+      }
+    }
   }
 
   checkGap(node.gap, err);
@@ -295,6 +306,20 @@ function visit(
           path: `${path}.children[${i}]`,
           severity: "warning",
           message: `grid placement on an absolutely positioned child is ignored; it positions against the grid container's padding box`,
+        });
+      }
+      if (
+        child &&
+        typeof child === "object" &&
+        (isPercentString((child as Record<string, unknown>).width) ||
+          isPercentString((child as Record<string, unknown>).height) ||
+          isPercentString((child as Record<string, unknown>).flexBasis))
+      ) {
+        issues.push({
+          nodeId: typeof child.id === "string" ? child.id : null,
+          path: `${path}.children[${i}]`,
+          severity: "warning",
+          message: `percentage sizes on grid children are outside the verified vocabulary (the grid area containing block is not modeled); treated as auto`,
         });
       }
       if (child && typeof child === "object" && child.order !== undefined) {
@@ -393,6 +418,14 @@ function percentageHint(v: unknown): string {
   return "";
 }
 
+function isPercentString(v: unknown): boolean {
+  return (
+    typeof v === "string" &&
+    /^\d*\.?\d+%$/.test(v) &&
+    Number.isFinite(parseFloat(v))
+  );
+}
+
 function checkSize(
   v: unknown,
   prop: string,
@@ -401,8 +434,9 @@ function checkSize(
   if (v === undefined || isFiniteNumber(v)) return;
   if (typeof v === "string" && (KEYWORD_SIZES.has(v) || v === "fit-content"))
     return;
+  if (isPercentString(v)) return;
   err(
-    `"${prop}" must be a finite number, "auto", "min-content", "max-content", or "fit-content", got ${describe(v)}${percentageHint(v)}`,
+    `"${prop}" must be a finite number, "auto", "min-content", "max-content", "fit-content", or a percentage, got ${describe(v)}${percentageHint(v)}`,
   );
 }
 

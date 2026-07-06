@@ -57,8 +57,8 @@ export interface LayoutNode {
   /** Optional: nodes without an id get a collision-safe auto id. */
   id?: string;
 
-  width?: number | "auto" | "min-content" | "max-content" | "fit-content";
-  height?: number | "auto" | "min-content" | "max-content" | "fit-content";
+  width?: number | "auto" | "min-content" | "max-content" | "fit-content" | `${number}%`;
+  height?: number | "auto" | "min-content" | "max-content" | "fit-content" | `${number}%`;
   minWidth?: number | "min-content" | "max-content";
   maxWidth?: number | "min-content" | "max-content";
   minHeight?: number | "min-content" | "max-content";
@@ -94,7 +94,7 @@ export interface LayoutNode {
 
   flexGrow?: number;
   flexShrink?: number;
-  flexBasis?: number | "auto" | "content";
+  flexBasis?: number | "auto" | "content" | `${number}%`;
   alignSelf?:
     | "auto"
     | "flex-start"
@@ -136,8 +136,8 @@ export interface LayoutNode {
 export interface NormalizedLayoutNode {
   id: string;
 
-  width?: number | "auto" | "min-content" | "max-content" | "fit-content";
-  height?: number | "auto" | "min-content" | "max-content" | "fit-content";
+  width?: number | "auto" | "min-content" | "max-content" | "fit-content" | `${number}%`;
+  height?: number | "auto" | "min-content" | "max-content" | "fit-content" | `${number}%`;
   minWidth?: number;
   maxWidth?: number;
   minHeight?: number;
@@ -172,7 +172,7 @@ export interface NormalizedLayoutNode {
 
   flexGrow?: number;
   flexShrink?: number;
-  flexBasis?: number | "auto" | "content";
+  flexBasis?: number | "auto" | "content" | `${number}%`;
   alignSelf?:
     | "auto"
     | "flex-start"

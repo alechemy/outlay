@@ -122,8 +122,8 @@ interface LayoutNode {
   id?: string; // auto-assigned when omitted
 
   // Box model
-  width?: number | "auto" | "min-content" | "max-content" | "fit-content";
-  height?: number | "auto" | "min-content" | "max-content" | "fit-content";
+  width?: number | "auto" | "min-content" | "max-content" | "fit-content" | `${number}%`;
+  height?: number | "auto" | "min-content" | "max-content" | "fit-content" | `${number}%`;
   minWidth?: number | "min-content" | "max-content";
   maxWidth?: number | "min-content" | "max-content";
   minHeight?: number | "min-content" | "max-content";
@@ -159,7 +159,7 @@ interface LayoutNode {
   // Flex item
   flexGrow?: number;
   flexShrink?: number;
-  flexBasis?: number | "auto" | "content";
+  flexBasis?: number | "auto" | "content" | `${number}%`;
   alignSelf?:
     | "auto"
     | "flex-start"
@@ -270,6 +270,7 @@ guard — is in [`examples/layout-assertions/`](examples/layout-assertions/). Ru
 
 - Flexbox layout (row, column, reverse, wrap)
 - `flex-grow`, `flex-shrink`, `flex-basis` with iterative clamping
+- Percentage `width` / `height` / `flexBasis` on flex children, resolved against the containing block's content box — including parents sized by the solver itself (flex-grown, stretched, or auto-main containers, where percentages re-resolve once the main size is determined)
 - `justify-content`: all 6 values
 - `align-items` / `align-self` (including `baseline`) / `align-content` (all 7 values)
 - `gap` (single value and `{ row, column }`, including wrapped lines)
@@ -313,7 +314,7 @@ Coverage boundaries (accepted, but outside the verified fixture set, so treat wi
 
 ## Accuracy
 
-4300 fixtures across 34 tiers, all passing. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
+4450 fixtures across 35 tiers, all passing. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
 
 ## Performance
 

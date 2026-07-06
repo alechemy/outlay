@@ -81,16 +81,21 @@ assert(
 
 // Percentage and CSS-string sizes
 assert(
-  messages({ id: "r", width: "50%" as never }).includes("percentages are not supported"),
-  "percentage width gets the dedicated hint",
+  issuesOf({
+    id: "r",
+    width: 200,
+    height: 100,
+    children: [{ id: "c", width: "50%", height: "25.5%", flexBasis: "30%" }],
+  }).length === 0,
+  "percentage width/height/flexBasis are valid on flex children",
 );
 assert(
   messages({ id: "r", width: "100px" as never }).includes("not a CSS string"),
   "px string width gets the CSS-string hint",
 );
 assert(
-  messages({ id: "r", flexBasis: "30%" as never }).includes("percentages are not supported"),
-  "percentage flexBasis gets the dedicated hint",
+  messages({ id: "r", minWidth: "50%" as never }).includes("percentages are not supported"),
+  "percentage minWidth still gets the dedicated hint",
 );
 
 // NaN and bad enums
@@ -426,6 +431,35 @@ assert(
     `"minWidth" must be a finite number, "min-content", or "max-content"`,
   ),
   "fit-content as a min/max size is an error",
+);
+
+// Percentage boundary warnings
+assert(
+  issuesOf({ id: "r", width: "50%" }).some(
+    (i) => i.severity === "warning" && i.message.includes("has no containing block"),
+  ),
+  "percentage size on the root warns",
+);
+assert(
+  issuesOf({
+    id: "r",
+    display: "grid",
+    gridTemplateColumns: [100],
+    height: 50,
+    children: [{ id: "c", width: "50%" }],
+  }).some(
+    (i) => i.severity === "warning" && i.message.includes("percentage sizes on grid children"),
+  ),
+  "percentage size on a grid child warns",
+);
+assert(
+  issuesOf({
+    id: "r",
+    width: 200,
+    height: 50,
+    children: [{ id: "c", width: "50%" }],
+  }).every((i) => !i.message.includes("percentage")),
+  "percentage size on a flex child does not warn",
 );
 
 console.log(`\n--- Validate Tests ---`);
