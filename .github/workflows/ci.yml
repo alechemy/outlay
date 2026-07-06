@@ -21,6 +21,9 @@ jobs:
       - run: npm test
       - run: npm run test:trace
       - run: npm run test:validate
+      - run: npm run test:api
+      - run: npm run test:text
+      - run: npm run test:html
       - run: npm run package-smoke-test
       - run: npm run test:example
       - run: npx puppeteer browsers install chrome
