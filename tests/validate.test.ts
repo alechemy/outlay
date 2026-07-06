@@ -275,6 +275,159 @@ assert(
   "flexBasis content with a definite cross-axis size does not warn",
 );
 
+// order on a grid child
+assert(
+  issuesOf({
+    id: "r",
+    display: "grid",
+    gridTemplateColumns: [100],
+    children: [{ id: "c", order: 2 }],
+  }).some(
+    (i) =>
+      i.severity === "warning" &&
+      i.message.includes(`"order" is ignored by grid auto-placement`),
+  ),
+  "order on a grid child warns",
+);
+assert(
+  issuesOf({
+    id: "r",
+    display: "flex",
+    children: [{ id: "c", order: 2 }],
+  }).every(
+    (i) => !i.message.includes(`"order" is ignored by grid auto-placement`),
+  ),
+  "order on a flex child does not warn",
+);
+
+// fit-content track inside repeat()
+assert(
+  issuesOf({
+    id: "r",
+    display: "grid",
+    gridTemplateColumns: [{ repeat: 2, tracks: [{ fitContent: 100 }] }],
+  }).some(
+    (i) =>
+      i.severity === "warning" &&
+      i.message.includes("fit-content track inside repeat()"),
+  ),
+  "fit-content track inside repeat warns",
+);
+assert(
+  issuesOf({
+    id: "r",
+    display: "grid",
+    gridTemplateColumns: [{ fitContent: 100 }, 200],
+  }).every((i) => !i.message.includes("fit-content track inside repeat()")),
+  "fit-content track outside repeat does not warn",
+);
+
+// fit-content cross size in a wrap container
+assert(
+  issuesOf({
+    id: "r",
+    display: "flex",
+    flexWrap: "wrap",
+    children: [{ id: "c", height: "fit-content" }],
+  }).some(
+    (i) =>
+      i.severity === "warning" &&
+      i.message.includes(`"height: fit-content" (cross axis) in a wrap container`),
+  ),
+  "fit-content cross size in a wrap container warns",
+);
+assert(
+  issuesOf({
+    id: "r",
+    display: "flex",
+    flexDirection: "column",
+    flexWrap: "wrap",
+    height: 100,
+    children: [{ id: "c", width: "fit-content" }],
+  }).some(
+    (i) =>
+      i.message.includes(`"width: fit-content" (cross axis) in a wrap container`),
+  ),
+  "fit-content cross size (width) in a column wrap container warns",
+);
+assert(
+  issuesOf({
+    id: "r",
+    display: "flex",
+    flexWrap: "wrap",
+    children: [{ id: "c", width: "fit-content" }],
+  }).every((i) => !i.message.includes("(cross axis) in a wrap container")),
+  "fit-content main size in a wrap container does not warn",
+);
+assert(
+  issuesOf({
+    id: "r",
+    display: "flex",
+    children: [{ id: "c", height: "fit-content" }],
+  }).every((i) => !i.message.includes("(cross axis) in a wrap container")),
+  "fit-content cross size in a non-wrap container does not warn",
+);
+
+// aspect-ratio item likely placed into an implicit grid track
+assert(
+  issuesOf({
+    id: "r",
+    display: "grid",
+    gridTemplateColumns: [100, 100],
+    children: [{ id: "a", aspectRatio: 1 }, { id: "b" }, { id: "c" }],
+  }).some(
+    (i) =>
+      i.severity === "warning" &&
+      i.message.includes("may be placed into an implicit"),
+  ),
+  "aspect-ratio child beyond explicit cells warns",
+);
+assert(
+  issuesOf({
+    id: "r",
+    display: "grid",
+    gridTemplateColumns: [{ repeat: "auto-fill", tracks: [100] }],
+    children: [{ id: "a", aspectRatio: 1 }, { id: "b" }, { id: "c" }],
+  }).every((i) => !i.message.includes("may be placed into an implicit")),
+  "aspect-ratio with auto-fill repeat does not warn",
+);
+assert(
+  issuesOf({
+    id: "r",
+    display: "grid",
+    gridTemplateColumns: [100, 100],
+    children: [{ id: "a", aspectRatio: 1 }, { id: "b" }],
+  }).every((i) => !i.message.includes("may be placed into an implicit")),
+  "aspect-ratio within explicit cells does not warn",
+);
+assert(
+  issuesOf({
+    id: "r",
+    display: "grid",
+    gridTemplateColumns: [100, 100],
+    children: [{ id: "a" }, { id: "b" }, { id: "c" }],
+  }).every((i) => !i.message.includes("may be placed into an implicit")),
+  "extra children without aspect-ratio do not warn",
+);
+
+// Keyword min/max sizes
+assert(
+  issuesOf({
+    id: "r",
+    minWidth: "max-content",
+    maxWidth: "max-content",
+    minHeight: "min-content",
+    maxHeight: "max-content",
+  }).length === 0,
+  "keyword min/max sizes are valid",
+);
+assert(
+  messages({ id: "r", minWidth: "fit-content" as never }).includes(
+    `"minWidth" must be a finite number, "min-content", or "max-content"`,
+  ),
+  "fit-content as a min/max size is an error",
+);
+
 console.log(`\n--- Validate Tests ---`);
 console.log(`Passed: ${passed}`);
 console.log(`Failed: ${failed}`);

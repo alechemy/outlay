@@ -39,11 +39,14 @@ const ENUM_PROPS: Record<string, readonly string[]> = {
   justifySelf: ["auto", "start", "end", "center", "stretch"],
 };
 
-const NUMBER_PROPS = [
+const MINMAX_PROPS = [
   "minWidth",
   "maxWidth",
   "minHeight",
   "maxHeight",
+] as const;
+
+const NUMBER_PROPS = [
   "flexGrow",
   "flexShrink",
   "order",
@@ -165,6 +168,19 @@ function visit(
       err(`"${prop}" must be a finite number, got ${describe(v)}`);
     }
   }
+  for (const prop of MINMAX_PROPS) {
+    const v = node[prop];
+    if (
+      v !== undefined &&
+      !isFiniteNumber(v) &&
+      v !== "min-content" &&
+      v !== "max-content"
+    ) {
+      err(
+        `"${prop}" must be a finite number, "min-content", or "max-content", got ${describe(v)}`,
+      );
+    }
+  }
   if (isFiniteNumber(node.flexGrow) && node.flexGrow < 0) {
     err(`"flexGrow" must be >= 0`);
   }
@@ -207,6 +223,8 @@ function visit(
   checkGap(node.gap, err);
   checkTrackList(node.gridTemplateColumns, "gridTemplateColumns", err);
   checkTrackList(node.gridTemplateRows, "gridTemplateRows", err);
+  warnFitContentInRepeat(node.gridTemplateColumns, "gridTemplateColumns", warn);
+  warnFitContentInRepeat(node.gridTemplateRows, "gridTemplateRows", warn);
   if (node.gridAutoRows !== undefined && !isValidTrackSize(node.gridAutoRows)) {
     err(`"gridAutoRows" is not a valid track size: ${describe(node.gridAutoRows)}`);
   }
@@ -279,6 +297,28 @@ function visit(
           message: `grid placement on an absolutely positioned child is ignored; it positions against the grid container's padding box`,
         });
       }
+      if (child && typeof child === "object" && child.order !== undefined) {
+        issues.push({
+          nodeId: typeof child.id === "string" ? child.id : null,
+          path: `${path}.children[${i}]`,
+          severity: "warning",
+          message: `"order" is ignored by grid auto-placement, which places items in document order`,
+        });
+      }
+    }
+
+    const colCount = explicitTrackCount(node.gridTemplateColumns);
+    const rowCount = explicitTrackCount(node.gridTemplateRows);
+    if (colCount !== null && rowCount !== null) {
+      const inFlow = childList.filter(isInFlow);
+      const hasAspectRatio = inFlow.some(
+        (c) => (c as Record<string, unknown>).aspectRatio !== undefined,
+      );
+      if (hasAspectRatio && inFlow.length > colCount * rowCount) {
+        warn(
+          `aspect-ratio items may be placed into an implicit (stretched) auto track, which is outside the verified vocabulary`,
+        );
+      }
     }
   }
 
@@ -287,6 +327,9 @@ function visit(
       node.flexDirection === "column" || node.flexDirection === "column-reverse"
         ? "height"
         : "width";
+    const crossSizeProp = mainSizeProp === "width" ? "height" : "width";
+    const isWrap =
+      node.flexWrap === "wrap" || node.flexWrap === "wrap-reverse";
     for (let i = 0; i < childList.length; i++) {
       const child = childList[i] as Record<string, unknown>;
       if (
@@ -300,6 +343,19 @@ function visit(
           path: `${path}.children[${i}]`,
           severity: "warning",
           message: `"flexBasis: content" is treated as "auto", so the definite main size wins; in CSS, "content" would ignore it`,
+        });
+      }
+      if (
+        isWrap &&
+        child &&
+        typeof child === "object" &&
+        child[crossSizeProp] === "fit-content"
+      ) {
+        issues.push({
+          nodeId: typeof child.id === "string" ? child.id : null,
+          path: `${path}.children[${i}]`,
+          severity: "warning",
+          message: `"${crossSizeProp}: fit-content" (cross axis) in a wrap container is outside the verified vocabulary; the solver assumes a single-line container with a definite cross size`,
         });
       }
     }
@@ -424,6 +480,70 @@ function isValidTrackSize(v: unknown): boolean {
 
 function isFrString(v: unknown): boolean {
   return typeof v === "string" && /^\d*\.?\d+fr$/.test(v);
+}
+
+function isFitContentTrack(t: unknown): boolean {
+  return (
+    typeof t === "object" &&
+    t !== null &&
+    !Array.isArray(t) &&
+    "fitContent" in (t as Record<string, unknown>)
+  );
+}
+
+function warnFitContentInRepeat(
+  v: unknown,
+  prop: string,
+  warn: (message: string) => void,
+): void {
+  if (!Array.isArray(v)) return;
+  for (const entry of v) {
+    if (
+      typeof entry === "object" &&
+      entry !== null &&
+      "repeat" in (entry as Record<string, unknown>)
+    ) {
+      const tracks = (entry as Record<string, unknown>).tracks;
+      if (Array.isArray(tracks) && tracks.some(isFitContentTrack)) {
+        warn(
+          `"${prop}" uses a fit-content track inside repeat(), which is outside the verified vocabulary`,
+        );
+        return;
+      }
+    }
+  }
+}
+
+/** Count of explicit tracks, or null when an auto-fill/auto-fit repeat makes the count indefinite. Undefined templates count as one identity track. */
+function explicitTrackCount(v: unknown): number | null {
+  if (!Array.isArray(v)) return 1;
+  let count = 0;
+  for (const entry of v) {
+    if (
+      typeof entry === "object" &&
+      entry !== null &&
+      "repeat" in (entry as Record<string, unknown>)
+    ) {
+      const rep = entry as Record<string, unknown>;
+      if (rep.repeat === "auto-fill" || rep.repeat === "auto-fit") return null;
+      if (isFiniteNumber(rep.repeat) && Array.isArray(rep.tracks)) {
+        count += rep.repeat * rep.tracks.length;
+      }
+    } else {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function isInFlow(child: unknown): boolean {
+  if (typeof child !== "object" || child === null) return false;
+  const c = child as Record<string, unknown>;
+  return (
+    c.display !== "none" &&
+    c.position !== "absolute" &&
+    c.position !== "fixed"
+  );
 }
 
 function hasVerticalMargin(child: unknown): boolean {

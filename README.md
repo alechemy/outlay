@@ -101,7 +101,7 @@ Live at [alechemy.github.io/outlay](https://alechemy.github.io/outlay/): a layou
 The solver itself never validates: it assumes a well-formed tree and stays fast. `validateTree` is the development-time companion — run it in tests or behind a dev flag to catch the mistakes that would otherwise produce a silently wrong layout:
 
 - **errors**: input outside the supported vocabulary — duplicate `id`s (result boxes are keyed by id), percentage or CSS-string sizes (`"50%"`, `"100px"`), unsupported enum values, malformed track lists or grid placements, `NaN` dimensions
-- **warnings**: supported input that hits a documented divergence from browser CSS — a `display: "block"` container with no definite height (resolves to content-height 0), vertical margins in block flow (no margin collapse), `baseline` alignment in grid (treated as `start`), plus typo detection for unknown property names (`"flex-direction"` → `flexDirection`)
+- **warnings**: supported input that hits a documented divergence from browser CSS — a `display: "block"` container with no definite height (resolves to content-height 0), vertical margins in block flow (no margin collapse), `baseline` alignment in grid (treated as `start`), `flexBasis: "content"` with a definite main size (treated as `"auto"`, so the size wins), `order` on a grid child (ignored; grid places in document order), fit-content boundary cases (a `fit-content` track inside `repeat()`, or a `fit-content` cross size in a wrap container), an aspect-ratio item that may land in an implicit stretched auto track, plus typo detection for unknown property names (`"flex-direction"` → `flexDirection`)
 
 Each issue carries `{ nodeId, path, severity, message }`, where `path` locates the node (e.g. `root.children[2]`).
 
@@ -124,10 +124,10 @@ interface LayoutNode {
   // Box model
   width?: number | "auto" | "min-content" | "max-content" | "fit-content";
   height?: number | "auto" | "min-content" | "max-content" | "fit-content";
-  minWidth?: number;
-  maxWidth?: number;
-  minHeight?: number;
-  maxHeight?: number;
+  minWidth?: number | "min-content" | "max-content";
+  maxWidth?: number | "min-content" | "max-content";
+  minHeight?: number | "min-content" | "max-content";
+  maxHeight?: number | "min-content" | "max-content";
   aspectRatio?: number; // width / height, applied to the box-sizing box
   padding?: number | Partial<BoxSides>;
   margin?: number | Partial<MarginBoxSides>; // supports "auto" per-side
@@ -273,7 +273,7 @@ guard — is in [`examples/layout-assertions/`](examples/layout-assertions/). Ru
 - `justify-content`: all 6 values
 - `align-items` / `align-self` (including `baseline`) / `align-content` (all 7 values)
 - `gap` (single value and `{ row, column }`, including wrapped lines)
-- `min-width` / `max-width` / `min-height` / `max-height` on both axes
+- `min-width` / `max-width` / `min-height` / `max-height` on both axes, including `min-content` / `max-content` keywords (keyword heights assume width-independent content — see coverage boundaries)
 - Multi-line wrapping (`wrap`, `wrap-reverse`)
 - Nested flex containers with indefinite size resolution
 - `min-content` / `max-content` / `fit-content` intrinsic sizing on container widths/heights and on flex items
@@ -285,6 +285,8 @@ guard — is in [`examples/layout-assertions/`](examples/layout-assertions/). Ru
 - `display: none`
 - `order` property (flex)
 - `content-box` and `border-box` sizing
+
+There is no `overflow` property — outlay never paints or scrolls. The one layout-relevant effect of `overflow: hidden` in CSS, releasing a flex item's automatic minimum size so it can shrink past its content, is expressed with `minWidth: 0` / `minHeight: 0` on the shrinking child, exactly as in CSS flexbox practice.
 
 CSS Grid (`display: "grid"`):
 
@@ -298,6 +300,8 @@ CSS Grid (`display: "grid"`):
 
 Grid exclusions (v1): no percentage tracks (caller resolves them), no named lines or `grid-template-areas` (caller resolves to line numbers), no subgrid, no masonry, no grid baseline alignment.
 
+Coverage boundaries (accepted, but outside the verified fixture set, so treat with care): aspect-ratio items in implicit stretched auto tracks; `fit-content` tracks inside `repeat()`; `fit-content` cross sizes in a wrap container; and aspect-ratio combined with auto margins. `validateTree` flags the ones it can detect statically.
+
 ## Non-goals
 
 - No CSS parsing, cascade, or selector matching -- caller provides resolved values
@@ -309,7 +313,7 @@ Grid exclusions (v1): no percentage tracks (caller resolves them), no named line
 
 ## Accuracy
 
-4150 fixtures across 33 tiers, all passing. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
+4300 fixtures across 34 tiers, all passing. Ground truth is Chromium `getBoundingClientRect()` measurements. Tolerance: 0.5px per property per node.
 
 ## Performance
 
@@ -320,6 +324,8 @@ Grid exclusions (v1): no percentage tracks (caller resolves them), no named line
 | 10,000 nodes | 5 levels | ~14ms   |
 
 Measured on Apple Silicon. Run `npm run bench` to reproduce.
+
+Every `solveLayout` call solves the whole tree from scratch; there is no incremental relayout or dirty-marking, so interactive callers at very large node counts should throttle solves or solve only the affected subtree.
 
 ## License
 
