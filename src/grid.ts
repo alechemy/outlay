@@ -38,7 +38,12 @@ export function expandTrackList(
 
 function trackMinSize(t: TrackSize): number {
   if (typeof t === "number") return t;
-  if (typeof t === "object" && t !== null && typeof t.min === "number") {
+  if (
+    typeof t === "object" &&
+    t !== null &&
+    !("fitContent" in t) &&
+    typeof t.min === "number"
+  ) {
     return t.min;
   }
   return 0;
@@ -384,6 +389,7 @@ export function resolveTrackSizes(
     const maxC = maxContributions[i] ?? 0;
     let min: number | "auto" | "min-content" | "max-content";
     let max: number | "auto" | "min-content" | "max-content" | `${number}fr`;
+    let fitLimit: number | undefined;
     if (typeof t === "number") {
       min = t;
       max = t;
@@ -395,6 +401,11 @@ export function resolveTrackSizes(
         min = t as "auto" | "min-content" | "max-content";
         max = t as "auto" | "min-content" | "max-content";
       }
+    } else if ("fitContent" in t) {
+      // fit-content(l): auto minimum, growth limit min(l, max-content).
+      min = "auto";
+      max = "max-content";
+      fitLimit = t.fitContent;
     } else {
       min = t.min;
       max = t.max;
@@ -417,6 +428,7 @@ export function resolveTrackSizes(
       else limit = maxC;
       if (max === "auto") stretch = true;
     }
+    if (fitLimit !== undefined) limit = Math.min(maxC, fitLimit);
     if (limit < base) limit = base;
 
     sizes.push(base);

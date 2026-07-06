@@ -74,6 +74,10 @@ let tier32Config: {
   dir: "row",
   cells: 4,
 };
+let tier33Config: { category: number; dir: "row" | "column" } = {
+  category: 0,
+  dir: "row",
+};
 
 const TEXT_FONT = "16px Arial";
 const TEXT_LINE_HEIGHT = 20;
@@ -2163,6 +2167,95 @@ function genNode(rng: RNG, depth: number, tier: number): GenNode {
       }
       node.boxSizing = rng.next() < 0.5 ? "border-box" : "content-box";
     }
+  } else if (tier === 33) {
+    const cat = tier33Config.category;
+    if (depth === 2) {
+      if (cat === 2 || cat === 3) {
+        node.display = "grid";
+        node.width = rng.nextRange(300, 700);
+        node.height = rng.nextRange(200, 500);
+        const fitTrack = (): TrackListEntry => ({
+          fitContent: rng.nextRange(60, 250),
+        });
+        const otherTrack = (): TrackListEntry => {
+          const r = rng.next();
+          return r < 0.5 ? rng.nextRange(60, 150) : r < 0.75 ? "auto" : "1fr";
+        };
+        if (cat === 2) {
+          node.gridTemplateColumns = Array.from(
+            { length: rng.nextRange(2, 3) },
+            () => (rng.next() < 0.6 ? fitTrack() : otherTrack()),
+          );
+          node.gridTemplateRows = Array.from(
+            { length: rng.nextRange(1, 2) },
+            (): TrackListEntry => rng.nextRange(60, 140),
+          );
+        } else {
+          node.gridTemplateColumns = Array.from(
+            { length: 2 },
+            (): TrackListEntry => rng.nextRange(80, 160),
+          );
+          node.gridTemplateRows = Array.from(
+            { length: rng.nextRange(2, 3) },
+            () =>
+              rng.next() < 0.6
+                ? ({ fitContent: rng.nextRange(40, 160) } as TrackListEntry)
+                : rng.next() < 0.5
+                  ? (rng.nextRange(50, 120) as TrackListEntry)
+                  : ("auto" as TrackListEntry),
+          );
+        }
+        if (rng.next() < 0.5) node.gap = genGap(rng);
+      } else {
+        const dir = rng.nextChoice(["row", "column"] as const);
+        tier33Config.dir = dir;
+        node.display = "flex";
+        node.flexDirection = dir;
+        node.flexWrap = "nowrap";
+        node.width = rng.nextRange(200, 600);
+        node.height = rng.nextRange(150, 450);
+        if (rng.next() < 0.5) {
+          node.alignItems = rng.nextChoice([
+            "flex-start",
+            "center",
+            "stretch",
+          ] as const);
+        }
+        if (rng.next() < 0.3) node.gap = genGap(rng);
+      }
+    } else if (depth === 1) {
+      node.display = "flex";
+      if (cat === 0) {
+        node.width = "fit-content";
+        node.flexDirection = "row";
+        if (rng.next() < 0.5) node.flexWrap = "wrap";
+        if (rng.next() < 0.4) node.height = rng.nextRange(40, 120);
+        node.flexGrow = rng.nextChoice([0, 0, 1]);
+        node.flexShrink = rng.nextChoice([0, 1]);
+      } else if (cat === 1) {
+        node.height = "fit-content";
+        node.flexDirection = "column";
+        if (rng.next() < 0.5) node.width = rng.nextRange(60, 160);
+        node.flexGrow = rng.nextChoice([0, 0, 1]);
+        node.flexShrink = rng.nextChoice([0, 1]);
+      } else if (cat === 2) {
+        node.flexDirection = "row";
+        if (rng.next() < 0.6) node.flexWrap = "wrap";
+      } else {
+        node.flexDirection = "column";
+      }
+      if (rng.next() < 0.3) {
+        const p = rng.nextRange(2, 12);
+        node.padding = { top: p, right: p, bottom: p, left: p };
+      }
+      if (rng.next() < 0.4) {
+        node.boxSizing = rng.next() < 0.5 ? "border-box" : "content-box";
+      }
+    } else {
+      node.width = rng.nextRange(30, 90);
+      node.height = rng.nextRange(20, 60);
+      node.flexShrink = rng.nextChoice([0, 0, 1]);
+    }
   }
 
   if (depth > 0 && !isLeaf) {
@@ -2239,6 +2332,10 @@ function genNode(rng: RNG, depth: number, tier: number): GenNode {
                         : tier32Config.category === 3
                           ? Math.min(rng.nextRange(3, 6), tier32Config.cells)
                           : rng.nextRange(2, 4)
+                    : tier === 33
+                      ? depth === 2
+                        ? rng.nextRange(2, 3)
+                        : rng.nextRange(2, 5)
                     : (tier >= 2 && tier <= 5) || tier === 14
                   ? rng.nextRange(2, 5)
                   : rng.nextRange(1, 3);
@@ -2439,6 +2536,9 @@ async function generateFixtures(
     if (tier === 32) {
       tier32Config.category = i % 4;
     }
+    if (tier === 33) {
+      tier33Config.category = i % 4;
+    }
 
     const depth =
       tier === 7 || tier === 12
@@ -2467,7 +2567,8 @@ async function generateFixtures(
                 tier === 31 ||
                 tier === 32
               ? 1
-            : tier === 23 || tier === 28 || tier === 29 || tier === 30
+            : tier === 23 || tier === 28 || tier === 29 || tier === 30 ||
+                tier === 33
               ? 2
             : (tier >= 2 && tier <= 6) ||
                 tier === 8 ||

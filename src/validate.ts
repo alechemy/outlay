@@ -343,9 +343,10 @@ function checkSize(
   err: (message: string) => void,
 ): void {
   if (v === undefined || isFiniteNumber(v)) return;
-  if (typeof v === "string" && KEYWORD_SIZES.has(v)) return;
+  if (typeof v === "string" && (KEYWORD_SIZES.has(v) || v === "fit-content"))
+    return;
   err(
-    `"${prop}" must be a finite number, "auto", "min-content", or "max-content", got ${describe(v)}${percentageHint(v)}`,
+    `"${prop}" must be a finite number, "auto", "min-content", "max-content", or "fit-content", got ${describe(v)}${percentageHint(v)}`,
   );
 }
 
@@ -402,6 +403,9 @@ function isValidTrackSize(v: unknown): boolean {
   }
   if (typeof v === "object" && v !== null && !Array.isArray(v)) {
     const o = v as Record<string, unknown>;
+    if ("fitContent" in o) {
+      return isFiniteNumber(o.fitContent) && o.fitContent >= 0;
+    }
     const minOk =
       (isFiniteNumber(o.min) && o.min >= 0) ||
       o.min === "auto" ||

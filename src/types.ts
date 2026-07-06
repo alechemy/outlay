@@ -4,6 +4,7 @@ export type TrackSize =
   | `${number}fr`
   | "min-content"
   | "max-content"
+  | { fitContent: number }
   | {
       min: number | "auto" | "min-content" | "max-content";
       max: number | "auto" | `${number}fr` | "min-content" | "max-content";
@@ -54,8 +55,8 @@ export type MarginSidesInput = number | Partial<MarginBoxSides>;
 export interface LayoutNode {
   id: string;
 
-  width?: number | "auto" | "min-content" | "max-content";
-  height?: number | "auto" | "min-content" | "max-content";
+  width?: number | "auto" | "min-content" | "max-content" | "fit-content";
+  height?: number | "auto" | "min-content" | "max-content" | "fit-content";
   minWidth?: number;
   maxWidth?: number;
   minHeight?: number;
@@ -133,8 +134,8 @@ export interface LayoutNode {
 export interface NormalizedLayoutNode {
   id: string;
 
-  width?: number | "auto" | "min-content" | "max-content";
-  height?: number | "auto" | "min-content" | "max-content";
+  width?: number | "auto" | "min-content" | "max-content" | "fit-content";
+  height?: number | "auto" | "min-content" | "max-content" | "fit-content";
   minWidth?: number;
   maxWidth?: number;
   minHeight?: number;

@@ -3,6 +3,7 @@ import { LayoutNode, TrackListEntry, TrackSize } from "../src/types";
 function trackSizeToCSS(t: TrackSize): string {
   if (typeof t === "number") return `${t}px`;
   if (typeof t === "string") return t;
+  if ("fitContent" in t) return `fit-content(${t.fitContent}px)`;
   const min = typeof t.min === "number" ? `${t.min}px` : t.min;
   const max = typeof t.max === "number" ? `${t.max}px` : t.max;
   return `minmax(${min}, ${max})`;

@@ -993,6 +993,57 @@ export function solveLayout(
               ratioCrossContent(child, childModel) ?? 0,
             ) + pb;
         } else if (
+          child[mainDim] === "fit-content" &&
+          typeof child.flexBasis !== "number"
+        ) {
+          const inline = !isRow
+            ? usedInlineSize(
+                node,
+                boxModelMap.get(node.id)!,
+                typeof node.width === "number" ||
+                  (parentResolvedDims.get(node.id)?.has("width") ?? false),
+                child,
+                childModel,
+                nodeMap,
+                boxModelMap,
+              )
+            : undefined;
+          const minC = computeIntrinsicContentSize(
+            child,
+            mainDim,
+            nodeMap,
+            boxModelMap,
+            "min-content",
+            inline,
+          );
+          const maxC = computeIntrinsicContentSize(
+            child,
+            mainDim,
+            nodeMap,
+            boxModelMap,
+            "max-content",
+            inline,
+          );
+          const mainDefinite = isRow
+            ? typeof node.width === "number" ||
+              (parentResolvedDims.get(node.id)?.has("width") ?? false)
+            : typeof node.height === "number" ||
+              (parentResolvedDims.get(node.id)?.has("height") ?? false);
+          let fit = maxC;
+          if (mainDefinite) {
+            const mainMargin = isRow
+              ? childModel.marginLeft + childModel.marginRight
+              : childModel.marginTop + childModel.marginBottom;
+            const availMain = Math.max(
+              0,
+              (isRow ? parentModel.contentWidth : parentModel.contentHeight) -
+                mainMargin -
+                pb,
+            );
+            fit = Math.max(minC, Math.min(maxC, availMain));
+          }
+          mainSize = fit + pb;
+        } else if (
           (child.display === "flex" || child.display === "grid") &&
           typeof child.flexBasis !== "number" &&
           typeof child[mainDim] !== "number"
@@ -1197,6 +1248,53 @@ export function solveLayout(
               isRow ? "height" : "width",
               ratioCrossContent(child, childModel) ?? 0,
             );
+          } else if (child[mainDimProp] === "fit-content") {
+            const inline = !isRow
+              ? usedInlineSize(
+                  node,
+                  boxModelMap.get(node.id)!,
+                  typeof node.width === "number" ||
+                    (parentResolvedDims.get(node.id)?.has("width") ?? false),
+                  child,
+                  childModel,
+                  nodeMap,
+                  boxModelMap,
+                )
+              : undefined;
+            const minC = computeIntrinsicContentSize(
+              child,
+              mainDimProp,
+              nodeMap,
+              boxModelMap,
+              "min-content",
+              inline,
+            );
+            const maxC = computeIntrinsicContentSize(
+              child,
+              mainDimProp,
+              nodeMap,
+              boxModelMap,
+              "max-content",
+              inline,
+            );
+            const mainDefinite = isRow
+              ? typeof node.width === "number" ||
+                (parentResolvedDims.get(node.id)?.has("width") ?? false)
+              : typeof node.height === "number" ||
+                (parentResolvedDims.get(node.id)?.has("height") ?? false);
+            flexBaseSize = maxC;
+            if (mainDefinite) {
+              const parentModelHere = boxModelMap.get(node.id)!;
+              const availMain = Math.max(
+                0,
+                (isRow
+                  ? parentModelHere.contentWidth
+                  : parentModelHere.contentHeight) -
+                  marginMain -
+                  paddingBorder,
+              );
+              flexBaseSize = Math.max(minC, Math.min(maxC, availMain));
+            }
           } else if (
             (child.display === "flex" || child.display === "grid") &&
             typeof child[mainDimProp] !== "number"
@@ -1979,7 +2077,40 @@ export function solveLayout(
             ? typeof child.height === "number"
             : typeof child.width === "number";
 
-          if (effectiveAlign === "stretch" && !hasDefiniteCrossSize) {
+          const crossSizeProp = isRow ? child.height : child.width;
+          if (crossSizeProp === "fit-content") {
+            const crossDim: "width" | "height" = isRow ? "height" : "width";
+            const availCross = Math.max(
+              0,
+              lineLayout.crossSize - crossMargin - crossPaddingBorder,
+            );
+            const inline = isRow ? childModel.contentWidth : undefined;
+            const minC = computeIntrinsicContentSize(
+              child,
+              crossDim,
+              nodeMap,
+              boxModelMap,
+              "min-content",
+              inline,
+            );
+            const maxC = computeIntrinsicContentSize(
+              child,
+              crossDim,
+              nodeMap,
+              boxModelMap,
+              "max-content",
+              inline,
+            );
+            const fit = Math.max(minC, Math.min(maxC, availCross));
+            if (isRow) {
+              childModel.contentHeight = fit;
+            } else {
+              childModel.contentWidth = fit;
+            }
+            if (!parentResolvedDims.has(childId))
+              parentResolvedDims.set(childId, new Set());
+            parentResolvedDims.get(childId)!.add(crossDim);
+          } else if (effectiveAlign === "stretch" && !hasDefiniteCrossSize) {
             const stretchedContent = Math.max(
               0,
               lineLayout.crossSize - crossMargin - crossPaddingBorder,
@@ -2190,7 +2321,27 @@ export function solveLayout(
           justifyVal === "stretch" && noHMarginAuto;
         const alignExplicitStretch = alignVal === "stretch" && noVMarginAuto;
         let content: number;
-        if (child.aspectRatio) {
+        if (child.width === "fit-content") {
+          const minC = computeIntrinsicContentSize(
+            child,
+            "width",
+            nodeMap,
+            boxModelMap,
+            "min-content",
+          );
+          const maxC = computeIntrinsicContentSize(
+            child,
+            "width",
+            nodeMap,
+            boxModelMap,
+            "max-content",
+          );
+          const avail = Math.max(
+            0,
+            areaWidth - cm.marginLeft - cm.marginRight - hPB,
+          );
+          content = Math.max(minC, Math.min(maxC, avail));
+        } else if (child.aspectRatio) {
           if (justifyExplicitStretch) {
             content = Math.max(
               0,
@@ -2416,7 +2567,29 @@ export function solveLayout(
           child.alignSelf && child.alignSelf !== "auto"
             ? child.alignSelf
             : node.alignItems;
-        if (
+        if (child.height === "fit-content") {
+          const minC = computeIntrinsicContentSize(
+            child,
+            "height",
+            nodeMap,
+            boxModelMap,
+            "min-content",
+            cm.contentWidth,
+          );
+          const maxC = computeIntrinsicContentSize(
+            child,
+            "height",
+            nodeMap,
+            boxModelMap,
+            "max-content",
+            cm.contentWidth,
+          );
+          const avail = Math.max(
+            0,
+            areaHeight - cm.marginTop - cm.marginBottom - vPB,
+          );
+          content = Math.max(minC, Math.min(maxC, avail));
+        } else if (
           child.aspectRatio &&
           !(blockAlignVal === "stretch" && canStretch)
         ) {
