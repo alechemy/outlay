@@ -4,14 +4,13 @@ Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes wit
 
 That combination — **CSS Grid, Chromium-faithful, pure synchronous JavaScript** — doesn't exist anywhere else:
 
-|                                | CSS Grid             | Flexbox   | Pure JS, no WASM | Synchronous  | Matches browser layout      |
-| ------------------------------ | -------------------- | --------- | ---------------- | ------------ | --------------------------- |
-| **outlay**                     | ✅                   | ✅        | ✅               | ✅           | ✅ 0.5px, fixture-verified  |
-| Yoga (`yoga-layout`)           | ❌                   | ✅        | ❌ WASM          | ❌ async init | ❌ own model               |
-| Taffy (`taffy-layout`)         | ✅                   | ✅        | ❌ WASM          | ❌ async init | ❌ own model               |
-| Satori (HTML → SVG)            | ❌                   | ✅ (Yoga) | ❌ Yoga WASM     | ❌           | ❌                          |
-| jsdom                          | ❌ computes no layout | ❌       | ✅               | ✅           | ❌ every box is 0×0         |
-| Headless Chromium / Playwright | ✅                   | ✅        | ❌               | ❌           | ✅ it *is* the browser      |
+|                        | **outlay**                 | Yoga (`yoga-layout`) | Taffy (`taffy-layout`) | Satori (HTML → SVG) | jsdom                | Headless Chromium / Playwright |
+| ---------------------- | -------------------------- | -------------------- | ---------------------- | ------------------- | -------------------- | ------------------------------ |
+| CSS Grid               | ✅                         | ❌                   | ✅                     | ❌                  | ❌ computes no layout | ✅                             |
+| Flexbox                | ✅                         | ✅                   | ✅                     | ✅ (Yoga)           | ❌                   | ✅                             |
+| Pure JS, no WASM       | ✅                         | ❌ WASM              | ❌ WASM                | ❌ Yoga WASM        | ✅                   | ❌                             |
+| Synchronous            | ✅                         | ❌ async init        | ❌ async init          | ❌                  | ✅                   | ❌                             |
+| Matches browser layout | ✅ 0.5px, fixture-verified | ❌ own model         | ❌ own model           | ❌                  | ❌ every box is 0×0  | ✅ it *is* the browser         |
 
 Where that matters most is **headless rendering** — OG images, SVG/PDF reports, server-rendered previews: anywhere you need real CSS layout and don't have (or don't want to boot) a browser. Satori proved the demand for "CSS layout → image, no browser"; outlay adds the half of CSS that Satori and Yoga are missing. This card's layout is a real CSS Grid — non-uniform `fr` columns, row and column spans, text wrapped at the `fr`-resolved width — solved and painted headlessly in ~3ms ([source](pages/demos/og-image/generate.ts), see [Headless rendering](#headless-rendering)):
 
