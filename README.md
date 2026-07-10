@@ -74,7 +74,9 @@ const { boxes } = solveLayout(tree);
 The converter is strict by design: anything it accepts maps 1:1 onto the
 supported vocabulary, and anything else (percentages, `em`, `calc()`, classes,
 unknown properties, text content) throws an `HTMLParseError` naming the
-offending declaration and element. Two deliberate mappings to know about:
+offending declaration and element. (Text content and paint styles are accepted
+by the [`outlay/render`](#headless-rendering) wrapper, which turns the same
+markup into a finished SVG.) Two deliberate mappings to know about:
 elements without a `display` declaration become outlay's default (`flex`, not
 CSS's `block`), and elements without `box-sizing` get an explicit
 `"content-box"` (the browser default) so converted trees match what the
@@ -315,6 +317,32 @@ import { renderDebugSvg } from "outlay/svg";
 const result = solveLayout(tree, { debug: true });
 fs.writeFileSync("layout.svg", renderDebugSvg(tree, result, { trace: result.trace }));
 ```
+
+And when the layout already exists as markup, `outlay/render` composes the
+whole pipeline in one call — the Satori shape, but Grid-capable:
+
+```ts
+import { readFileSync } from "node:fs";
+import { htmlToSvg } from "outlay/render";
+
+const svg = htmlToSvg(
+  `<div style="display: grid; width: 800px; grid-template-columns: 1fr 1fr; gap: 16px;
+               padding: 24px; background: #101321; border-radius: 16px;
+               font-family: Inter; font-size: 15px; line-height: 22px; color: #e6e9f2">
+     <div style="grid-column: 1 / span 2; font-size: 28px; line-height: 34px; font-weight: 700">Weekly report</div>
+     <div style="background: #171c2c; border-radius: 10px; padding: 16px">Signups grew 14% week over week.</div>
+     <div style="background: #171c2c; border-radius: 10px; padding: 16px">Median solve time held at 1.7ms.</div>
+   </div>`,
+  { fonts: { Inter: readFileSync("Inter-Regular.ttf") } },
+);
+```
+
+Text properties (`font-family`, `font-size`, `font-weight`, `line-height`,
+`color`, `text-align`) inherit down the tree like CSS; the paint vocabulary is
+solid backgrounds, `border-radius`, and `border-color`. Everything else keeps
+`parseHTML`'s strictness — unsupported CSS throws with the element's path — and
+`htmlToLayout` returns the intermediate `{ tree, styles }` when you want to
+solve or inspect before painting.
 
 SVG is the supported output. Rasterizing to PNG (for OG images proper) takes
 any SVG rasterizer — `sharp`, `resvg`, or a browser screenshot; outlay

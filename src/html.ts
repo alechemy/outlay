@@ -22,6 +22,48 @@ export class HTMLParseError extends Error {
   }
 }
 
+/** A `line-height` declaration, kept unresolved because the multiplier needs the resolved `font-size` and `normal` needs the resolved font. */
+export type LineHeightDecl =
+  | { kind: "px"; value: number }
+  | { kind: "multiplier"; value: number }
+  | { kind: "normal" };
+
+/**
+ * The paint and text CSS a node declares in render mode, before inheritance
+ * and font resolution. Only the properties actually written appear; `text`
+ * is the collapsed text content and is present iff the node is a text leaf.
+ */
+export interface ParsedRenderStyle {
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: number;
+  lineHeight?: LineHeightDecl;
+  color?: string;
+  textAlign?: "start" | "center" | "end";
+  background?: string;
+  borderRadius?: number;
+  borderColor?: string;
+  text?: string;
+}
+
+/** Opt-in render mode for `parseHTML`: accepts text nodes and paint/text CSS, filling `styles` per produced node. */
+export interface ParseHTMLRenderOptions {
+  styles: Map<LayoutNode, ParsedRenderStyle>;
+}
+
+const BORDER_STYLES = new Set([
+  "none",
+  "hidden",
+  "dotted",
+  "dashed",
+  "solid",
+  "double",
+  "groove",
+  "ridge",
+  "inset",
+  "outset",
+]);
+
 const KEYWORD_SIZES = new Set(["auto", "min-content", "max-content"]);
 const SIZE_KEYWORDS = new Set([
   "auto",
@@ -103,7 +145,17 @@ interface LineSpec {
   value?: number;
 }
 
-export function parseHTML(html: string): LayoutNode {
+/**
+ * Convert strict HTML-with-inline-styles into a `LayoutNode`. Without
+ * `render`, any non-whitespace text and any paint/text CSS throws — the
+ * strictness is the feature. Passing `render` opts into render mode: text
+ * nodes become leaves and the paint/text vocabulary is collected into
+ * `render.styles`, keyed by the produced node.
+ */
+export function parseHTML(
+  html: string,
+  render?: ParseHTMLRenderOptions,
+): LayoutNode {
   const doc = parseDocument(html);
   const roots: Element[] = [];
   for (const child of doc.children) {
@@ -127,13 +179,18 @@ export function parseHTML(html: string): LayoutNode {
     );
   }
 
-  const ctx = { usedIds: new Set<string>(), autoCounter: { n: 0 } };
+  const ctx: ConvertContext = {
+    usedIds: new Set<string>(),
+    autoCounter: { n: 0 },
+    render,
+  };
   return convertElement(roots[0], "", true, 1, ctx);
 }
 
 interface ConvertContext {
   usedIds: Set<string>;
   autoCounter: { n: number };
+  render?: ParseHTMLRenderOptions;
 }
 
 function convertElement(
@@ -189,32 +246,61 @@ function convertElement(
   ctx.usedIds.add(id);
 
   const node: LayoutNode = { id };
-  applyStyle(node, el.attribs.style, path);
+  const renderStyle: ParsedRenderStyle | null = ctx.render ? {} : null;
+  applyStyle(node, el.attribs.style, path, renderStyle);
   if (node.boxSizing === undefined) node.boxSizing = "content-box";
 
   const children: LayoutNode[] = [];
+  const textParts: string[] = [];
   let elementIndex = 0;
   for (const child of el.children) {
     if (isElement(child)) {
       elementIndex++;
       children.push(convertElement(child, path, false, elementIndex, ctx));
     } else if (isText(child) && /\S/.test(child.data)) {
-      throw new HTMLParseError(
-        `outlay has no text layout; text needs a measureContent callback on a leaf node (found text "${snippet(child.data)}")`,
-        path,
-      );
+      if (!ctx.render) {
+        throw new HTMLParseError(
+          `outlay has no text layout; text needs a measureContent callback on a leaf node (found text "${snippet(child.data)}")`,
+          path,
+        );
+      }
+      textParts.push(child.data);
     }
     // whitespace text and comments: ignore
   }
+
+  if (renderStyle && textParts.length > 0) {
+    if (children.length > 0) {
+      throw new HTMLParseError(
+        "outlay has no anonymous boxes; wrap the text in its own element (found text alongside element children)",
+        path,
+      );
+    }
+    if (node.display === "flex" || node.display === "grid") {
+      throw new HTMLParseError(
+        `outlay has no anonymous boxes; an element with display: ${node.display} cannot directly contain text — wrap the text in its own element`,
+        path,
+      );
+    }
+    renderStyle.text = collapseText(textParts);
+    if (node.display === undefined) node.display = "block";
+  }
+
   if (children.length > 0) node.children = children;
+  if (renderStyle) ctx.render!.styles.set(node, renderStyle);
 
   return node;
+}
+
+function collapseText(parts: string[]): string {
+  return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
 function applyStyle(
   node: LayoutNode,
   style: string | undefined,
   path: string,
+  render: ParsedRenderStyle | null,
 ): void {
   if (!style) return;
 
@@ -345,6 +431,10 @@ function applyStyle(
         border.bottom = w;
         border.left = w;
         touchedBorder = true;
+        if (render) {
+          const color = borderShorthandColor(rawValue);
+          if (color) render.borderColor = color;
+        }
         break;
       }
       case "border-top":
@@ -434,6 +524,7 @@ function applyStyle(
         break;
 
       default:
+        if (render && applyRenderProp(render, prop, rawValue, value, fail)) break;
         fail(`unsupported property "${prop}"`);
     }
   }
@@ -594,6 +685,137 @@ function borderShorthandWidth(
   fail(
     `"${prop}: ${value}" has no px width; the border shorthand must include a <number>px width`,
   );
+}
+
+function borderShorthandColor(value: string): string | null {
+  for (const token of splitSpaces(value)) {
+    if (asPx(token) !== null) continue;
+    if (BORDER_STYLES.has(token.toLowerCase())) continue;
+    return token;
+  }
+  return null;
+}
+
+function applyRenderProp(
+  render: ParsedRenderStyle,
+  prop: string,
+  rawValue: string,
+  value: string,
+  fail: (m: string) => never,
+): boolean {
+  switch (prop) {
+    case "font-family":
+      render.fontFamily = firstFamily(rawValue);
+      return true;
+    case "font-size": {
+      const n = asPx(value);
+      if (n === null || n < 0)
+        fail(`"${prop}: ${rawValue}" must be a non-negative <number>px`);
+      render.fontSize = n;
+      return true;
+    }
+    case "font-weight":
+      render.fontWeight = parseFontWeight(value, rawValue, fail);
+      return true;
+    case "line-height":
+      render.lineHeight = parseLineHeight(value, rawValue, fail);
+      return true;
+    case "color":
+      render.color = colorString(rawValue, value, prop, fail);
+      return true;
+    case "text-align":
+      render.textAlign = parseTextAlign(value, rawValue, fail);
+      return true;
+    case "background":
+    case "background-color":
+      render.background = colorString(rawValue, value, prop, fail);
+      return true;
+    case "border-radius":
+      render.borderRadius = parsePx(value, prop, fail, false);
+      return true;
+    case "border-color":
+      render.borderColor = splitSpaces(rawValue)[0];
+      return true;
+    default:
+      return false;
+  }
+}
+
+function firstFamily(rawValue: string): string {
+  return rawValue
+    .split(",")[0]
+    .trim()
+    .replace(/^['"]|['"]$/g, "");
+}
+
+function parseFontWeight(
+  value: string,
+  rawValue: string,
+  fail: (m: string) => never,
+): number {
+  if (value === "normal") return 400;
+  if (value === "bold") return 700;
+  const n = asNumber(value);
+  if (n === null || n <= 0)
+    fail(`"font-weight: ${rawValue}" must be a number, normal, or bold`);
+  return n;
+}
+
+function parseLineHeight(
+  value: string,
+  rawValue: string,
+  fail: (m: string) => never,
+): LineHeightDecl {
+  if (value === "normal") return { kind: "normal" };
+  if (/px$/.test(value)) {
+    const n = asPx(value);
+    if (n === null || n < 0)
+      fail(`"line-height: ${rawValue}" px value must be non-negative`);
+    return { kind: "px", value: n };
+  }
+  const n = asNumber(value);
+  if (n === null || n < 0)
+    fail(
+      `"line-height: ${rawValue}" must be normal, a <number>px, or a unitless multiplier`,
+    );
+  return { kind: "multiplier", value: n };
+}
+
+function parseTextAlign(
+  value: string,
+  rawValue: string,
+  fail: (m: string) => never,
+): "start" | "center" | "end" {
+  switch (value) {
+    case "left":
+    case "start":
+      return "start";
+    case "center":
+      return "center";
+    case "right":
+    case "end":
+      return "end";
+    default:
+      fail(
+        `"text-align: ${rawValue}" is not supported; use left/start, center, or right/end`,
+      );
+  }
+}
+
+function colorString(
+  rawValue: string,
+  value: string,
+  prop: string,
+  fail: (m: string) => never,
+): string {
+  if (/gradient/.test(value) || value.includes("url("))
+    fail(
+      `"${prop}: ${rawValue}" — only solid colors are supported; gradients and url() are not`,
+    );
+  const tokens = splitSpaces(rawValue);
+  if (tokens.length !== 1)
+    fail(`"${prop}: ${rawValue}" must be a single solid color`);
+  return tokens[0];
 }
 
 function setGap(

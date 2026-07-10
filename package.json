@@ -53,6 +53,11 @@
       "import": "./dist/font.js",
       "default": "./dist/font.js"
     },
+    "./render": {
+      "types": "./dist/render.d.ts",
+      "import": "./dist/render.js",
+      "default": "./dist/render.js"
+    },
     "./pretext": {
       "types": "./dist/pretext.d.ts",
       "import": "./dist/pretext.js",
@@ -77,6 +82,7 @@
     "test:text": "tsx tests/text.test.ts",
     "test:svg": "tsx tests/svg.test.ts",
     "test:font": "tsx tests/font.test.ts",
+    "test:render": "tsx tests/render.test.ts",
     "test:html": "tsx tests/html.test.ts",
     "test:example": "npm run build && npm --prefix examples/layout-assertions install && npm --prefix examples/layout-assertions test",
     "generate": "tsx tests/generator.ts",

@@ -27,6 +27,7 @@ jobs:
       - run: npm run test:svg
       - run: npm run test:font
       - run: npm run test:html
+      - run: npm run test:render
       - run: npm run test:testing
       - run: npm run package-smoke-test
       - run: npm run test:example
