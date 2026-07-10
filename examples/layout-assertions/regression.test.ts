@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
-import type { LayoutNode } from "../../dist/index.js";
-import { overflowsX, range, sweep } from "./helpers.js";
+import type { LayoutNode } from "outlay";
+import { overflowsX, sweep } from "outlay/testing";
+import { range } from "./helpers.js";
 
 const PAGE_PAD = 16;
 const GAP = 16;

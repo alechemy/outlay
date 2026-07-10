@@ -1,14 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { solveLayout } from "../../dist/index.js";
-import type { LayoutNode, LayoutResult } from "../../dist/index.js";
-import {
-  assertContained,
-  assertNoOverlaps,
-  boxOf,
-  overflowsX,
-  range,
-  sweep,
-} from "./helpers.js";
+import { solveLayout } from "outlay";
+import type { LayoutNode, LayoutResult } from "outlay";
+import { assertNoOverlaps, overflowsX, sweep } from "outlay/testing";
+import { assertContained, boxOf, range } from "./helpers.js";
 import { measureText } from "./text-metrics.js";
 
 const PAGE_PAD = 16;

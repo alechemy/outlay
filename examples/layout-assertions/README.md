@@ -26,8 +26,8 @@ npm run test:example
 That builds the library to `dist/`, installs this example's dev dependencies, and
 runs the vitest suite.
 
-To run it standalone (after `npm run build` in the repo root, which the tests import
-from `../../dist`):
+To run it standalone (after `npm run build` in the repo root, which builds the `dist/`
+that the example's `outlay` dependency resolves to):
 
 ```sh
 cd examples/layout-assertions
@@ -37,11 +37,12 @@ npm test
 
 ## What's here
 
-- **`helpers.ts`** — assertion utilities over a `LayoutResult`: `boxOf`, `overlaps` /
-  `assertNoOverlaps`, `within` / `assertContained`, `overflowsX` / `overflowsY`, and
-  `sweep(widths, buildTree, invariant)` — the signature capability. `sweep` solves the
-  tree at each width and collects the widths where the invariant failed, so a failure
-  message tells you the exact viewport that broke.
+- **`outlay/testing`** — the shipped assertion utilities the tests import: `assertNoOverlaps`,
+  `overflowsX` / `overflowsY`, and `sweep(widths, buildTree, invariant)` — the signature
+  capability. `sweep` solves the tree at each width and collects the widths where the
+  invariant failed, so a failure names the exact viewport that broke.
+- **`helpers.ts`** — the few assertion utilities not (yet) in `outlay/testing`: `boxOf`,
+  `assertContained` (border box within a parent's content box), and `range`.
 - **`text-metrics.ts` + `word-metrics.json`** — a Node-safe `measureContent`. See below.
 - **`card-grid.test.ts`** — a realistic header + responsive card grid
   (`repeat(auto-fill, minmax(220px, 1fr))`) + footer CTA row, asserted across
@@ -60,7 +61,7 @@ const failures = sweep(range(320, 1280, 20), buildCardGrid, (result) => {
 expect(failures).toEqual([]);
 ```
 
-Each invariant throws on violation; `sweep` catches it and records `{ width, message }`,
+Each invariant throws on violation; `sweep` catches it and records `{ width, error }`,
 so an assertion failure names the offending width instead of a generic "expected true".
 
 ## Scope: you are testing your layout model
