@@ -1,6 +1,6 @@
 # outlay
 
-Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes without a browser, verified against Chromium's own layout engine at 0.5px tolerance across 4,150 generated fixtures. The layout equivalent of what [Pretext](https://github.com/chenglou/pretext) does for text measurement: extracting a DOM-dependent computation into standalone arithmetic.
+Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes without a browser, verified against Chromium's own layout engine at 0.5px tolerance across 4,450 generated fixtures. The layout equivalent of what [Pretext](https://github.com/chenglou/pretext) does for text measurement: extracting a DOM-dependent computation into standalone arithmetic.
 
 ## Installation
 
@@ -250,21 +250,30 @@ The `pages/demos/text-layout.html` demo wires this adapter into a live card grid
 
 Because `solveLayout` is synchronous and browser-free, you can assert a component's
 layout — overlaps, overflow, breakpoint column counts — inside a plain unit test, and
-sweep hundreds of viewport widths in a few milliseconds:
+sweep hundreds of viewport widths in a few milliseconds. The `outlay/testing` subpath
+ships the primitives:
 
 ```ts
-const failures = sweep(range(320, 1280, 20), buildCardGrid, (result) => {
+import { sweep, assertNoOverlaps, overflowsX } from "outlay/testing";
+
+const widths = Array.from({ length: 49 }, (_, i) => 320 + i * 20); // 320…1280
+const failures = sweep(widths, buildCardGrid, (result) => {
   assertNoOverlaps(result, cardIds);
   if (overflowsX(result, "page")) throw new Error("content crosses the page edge");
 });
 expect(failures).toEqual([]); // each failure names the width that broke
 ```
 
+`sweep(widths, buildTree, invariant)` solves `buildTree(width)` at every width and
+collects the widths where `invariant` throws. `assertNoOverlaps(result, ids?)` throws on
+the first overlapping pair (siblings only when `ids` is omitted); `overflowsX` /
+`overflowsY` report whether any descendant escapes a container's border box.
+
 jsdom computes no layout, WASM engines need async init, and Playwright is a sledgehammer
-for "does this overflow at 375px". A pure solver is the right tool. The full example —
-assertion helpers, a Node-safe text measurer, a responsive card grid, and a regression
-guard — is in [`examples/layout-assertions/`](examples/layout-assertions/). Run it with
-`npm run test:example`.
+for "does this overflow at 375px". A pure solver is the right tool. The full worked
+example — those primitives plus a Node-safe text measurer, a responsive card grid, and a
+regression guard — is in [`examples/layout-assertions/`](examples/layout-assertions/).
+Run it with `npm run test:example`.
 
 ## What's supported
 
