@@ -1,15 +1,22 @@
 {
   "name": "outlay",
   "version": "1.4.0",
-  "description": "Off-DOM CSS layout solver — computes Flexbox and CSS Grid positions and sizes without a browser",
+  "description": "Off-DOM CSS layout engine — Flexbox and CSS Grid box positions in pure synchronous JavaScript, no DOM, WASM, or native binaries",
   "keywords": [
     "css",
     "flexbox",
     "grid",
     "css-grid",
+    "css-layout-engine",
     "layout",
+    "layout-engine",
     "solver",
     "off-dom",
+    "browser-free",
+    "headless-layout",
+    "svg-layout",
+    "canvas-layout",
+    "pdf-layout",
     "positioning",
     "layout-testing"
   ],

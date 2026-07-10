@@ -1,6 +1,6 @@
 # Security Policy
 
-outlay is a pure-arithmetic library: no network access, no filesystem access, no `eval`, no dependencies at runtime. Its attack surface is limited to pathological input trees (e.g. adversarially deep nesting causing stack exhaustion).
+outlay's core solver is pure arithmetic: no network access, no filesystem access, no `eval`, and no runtime dependencies. The `outlay/html` subpath adds one runtime dependency, `htmlparser2`, and `outlay/pretext` uses the optional `@chenglou/pretext` peer; nothing else pulls in third-party code. The attack surface is limited to pathological input trees (e.g. adversarially deep nesting causing stack exhaustion).
 
 ## Reporting a vulnerability
 

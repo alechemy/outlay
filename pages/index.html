@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%232f9e44'/><path d='M6.5 2v12M2 6.5h12' stroke='white' stroke-width='1.6'/></svg>">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>outlay — off-DOM CSS layout</title>
+    <title>outlay — off-DOM CSS layout engine</title>
     <style>
       * {
         box-sizing: border-box;
@@ -131,9 +131,11 @@
         <h1>outlay</h1>
       </div>
       <p class="tag">
-        Off-DOM CSS layout. <strong>Flexbox and CSS Grid solved as pure
-        arithmetic</strong> — no browser, no reflow, no dependencies — verified
-        against Chromium at 0.5px tolerance across 3,700 generated fixtures.
+        Off-DOM CSS layout engine. <strong>Flexbox and CSS Grid solved as pure
+        synchronous arithmetic</strong> — no DOM, no WASM, no native binaries —
+        to feed real CSS layout to an SVG, canvas, PDF, or test-assertion
+        pipeline. Matched to Chromium across the supported CSS subset at 0.5px
+        tolerance, over 4,450 generated fixtures.
       </p>
       <div class="install"><span class="dollar">$</span>npm install outlay</div>
       <pre><span class="kw">import</span> { solveLayout } <span class="kw">from</span> "outlay";
@@ -149,7 +151,7 @@ boxes.get("main"); <span class="cm">// { x: 100, y: 0, width: 300, height: 200, 
         <a href="https://github.com/alechemy/outlay">github</a>
         <a href="https://www.npmjs.com/package/outlay">npm</a>
       </nav>
-      <footer>MIT · zero dependencies · ground truth: Chromium getBoundingClientRect</footer>
+      <footer>MIT · dependency-free core · ground truth: Chromium getBoundingClientRect</footer>
     </main>
   </body>
 </html>

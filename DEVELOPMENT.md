@@ -11,7 +11,7 @@ npx puppeteer browsers install chrome   # for the probe, generator, and browser 
 
 | Command                      | What it does                                                                     |
 | ---------------------------- | -------------------------------------------------------------------------------- |
-| `npm test`                   | Run the full fixture suite (3,700 Chromium-captured fixtures across 30 tiers)     |
+| `npm test`                   | Run the full fixture suite (4,450 Chromium-captured fixtures across 35 tiers)     |
 | `npm run test:validate`      | Unit tests for `validateTree`                                                     |
 | `npm run test:trace`         | Unit tests for the debug-trace comparator                                         |
 | `npm run test:example`       | Build `dist/` and run the `examples/layout-assertions` vitest package             |
