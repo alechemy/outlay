@@ -1,6 +1,6 @@
 {
   "name": "outlay",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Off-DOM CSS layout engine — Flexbox and CSS Grid box positions in pure synchronous JavaScript, no DOM, WASM, or native binaries",
   "keywords": [
     "css",
@@ -74,6 +74,7 @@
   },
   "files": [
     "CHANGELOG.md",
+    "COMPATIBILITY.md",
     "dist",
     "src",
     "LICENSE"

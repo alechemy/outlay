@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.1 — 2026-07-10
+
+- Docs: the README now leads with the low-level layout engine (Flexbox and CSS Grid boxes in pure synchronous JavaScript); headless rendering is presented as one use case rather than the headline.
+- Docs: Takumi added to the competitor comparison, with the differentiator stated honestly — pure synchronous JS with no WASM or native binaries, since Takumi also has Grid (via Taffy).
+- Docs: new `COMPATIBILITY.md` — verified, supported-but-unverified, intentional divergences, and non-goals — linked from the README and now shipped in the package. Accuracy claims are scoped to the tested CSS subset rather than to browser CSS as a whole.
+- Metadata: `package.json` description aligned and discovery keywords added (`css-layout-engine`, `headless-layout`, `svg-layout`, `canvas-layout`, `pdf-layout`, `browser-free`); homepage fixture count (4,450) and dependency wording corrected.
+- No code or type changes; `dist/` is identical to 1.4.0.
+
 ## 1.4.0 — 2026-07-10
 
 - `outlay/render`: `htmlToSvg` — HTML with inline styles to a finished SVG string in one call, the Satori shape with CSS Grid. Text properties (`font-family`, `font-size`, `font-weight`, `line-height`, `color`, `text-align`) inherit down the tree like CSS; the paint vocabulary is solid backgrounds, `border-radius`, and `border-color` (a uniform border paints an inset stroke). `htmlToLayout` returns the `{ tree, styles }` intermediate for solving or inspecting before painting.
