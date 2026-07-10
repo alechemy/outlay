@@ -2,6 +2,21 @@
 
 Off-DOM CSS layout solver. Computes Flexbox and CSS Grid positions and sizes without a browser, verified against Chromium's own layout engine at 0.5px tolerance across 4,450 generated fixtures. The layout equivalent of what [Pretext](https://github.com/chenglou/pretext) does for text measurement: extracting a DOM-dependent computation into standalone arithmetic.
 
+That combination — **CSS Grid, Chromium-faithful, pure synchronous JavaScript** — doesn't exist anywhere else:
+
+|                                | CSS Grid             | Flexbox   | Pure JS, no WASM | Synchronous  | Matches browser layout      |
+| ------------------------------ | -------------------- | --------- | ---------------- | ------------ | --------------------------- |
+| **outlay**                     | ✅                   | ✅        | ✅               | ✅           | ✅ 0.5px, fixture-verified  |
+| Yoga (`yoga-layout`)           | ❌                   | ✅        | ❌ WASM          | ❌ async init | ❌ own model               |
+| Taffy (`taffy-layout`)         | ✅                   | ✅        | ❌ WASM          | ❌ async init | ❌ own model               |
+| Satori (HTML → SVG)            | ❌                   | ✅ (Yoga) | ❌ Yoga WASM     | ❌           | ❌                          |
+| jsdom                          | ❌ computes no layout | ❌       | ✅               | ✅           | ❌ every box is 0×0         |
+| Headless Chromium / Playwright | ✅                   | ✅        | ❌               | ❌           | ✅ it *is* the browser      |
+
+Where that matters most is **headless rendering** — OG images, SVG/PDF reports, server-rendered previews: anywhere you need real CSS layout and don't have (or don't want to boot) a browser. Satori proved the demand for "CSS layout → image, no browser"; outlay adds the half of CSS that Satori and Yoga are missing. This card's layout is a real CSS Grid — non-uniform `fr` columns, row and column spans, text wrapped at the `fr`-resolved width — solved and painted headlessly in ~3ms ([source](pages/demos/og-image/generate.ts), see [Headless rendering](#headless-rendering)):
+
+![OG card: a CSS Grid solved and painted to SVG by outlay, with no browser](pages/demos/og-image/card.svg)
+
 ## Installation
 
 ```sh
@@ -68,7 +83,7 @@ layout, build `LayoutNode` trees directly.
 
 ## Demos
 
-Live at [alechemy.github.io/outlay](https://alechemy.github.io/outlay/): a layout explorer that renders the solver next to real browser CSS with a live match badge, plus animated transitions, drag-and-drop reorder, virtual scrolling, text-driven layout, and a nested dashboard with a solver-vs-native toggle. Locally: `npm start`, then open `/demos/index.html`.
+Live at [alechemy.github.io/outlay](https://alechemy.github.io/outlay/): a layout explorer that renders the solver next to real browser CSS with a live match badge, plus animated transitions, drag-and-drop reorder, virtual scrolling, text-driven layout, a nested dashboard with a solver-vs-native toggle, and the headless OG-image generator behind the card above. Locally: `npm start`, then open `/demos/index.html`.
 
 ## Defaults
 
@@ -240,11 +255,70 @@ const label = textNode(measure, { id: "label" });
 
 Capture the advances once (in a browser, or from font metrics) and commit them; `measureFromAdvances` takes a raw `number[]` if you manage words yourself.
 
+**From a font file**, `outlay/font` parses TTF/OTF metrics directly — no browser even for the capture step:
+
+```ts
+import { readFileSync } from "node:fs";
+import { parseFont, measureText } from "outlay/font";
+import { textNode } from "outlay/text";
+
+const inter = parseFont(readFileSync("Inter-Regular.ttf"));
+const label = textNode(
+  measureText(inter, "The quick brown fox", { size: 16, lineHeight: 20 }),
+);
+```
+
+Zero dependencies — a plain `DataView` parser over the `head`/`cmap`/`hhea`/`hmtx` tables. Advances are unshaped and unkerned: the per-glyph sums Chromium produces with `font-kerning: none` and ligatures disabled, verified against Chromium to 0.015px. With default shaping the browser comes out narrower on kerned pairs (`AV`, `To`); use captured advances or Pretext when that matters.
+
 Things to keep in mind:
 - **Match the CSS wrapping mode.** Pretext models `overflow-wrap: break-word` (it breaks inside long words at narrow widths), so render the same text with `overflow-wrap: anywhere` for the browser to agree at widths narrower than a word. With `overflow-wrap: normal` the min-content is the widest word instead.
 - **Quantize like the engine for exact agreement.** Chromium stores accumulated line widths and intrinsic text widths as LayoutUnit (1/64px, floored), so at knife-edge widths a word fits where raw float accumulation says it doesn't. Both shipped measurers apply this quantization; if you write your own, floor the running line width to 1/64 before each fit comparison and floor the widths you return. The solver itself stays quantization-free — the contract lives entirely in the `measureContent` implementation.
 
 The `pages/demos/text-layout.html` demo wires this adapter into a live card grid and checks the solver against the browser at 0.5px tolerance.
+
+## Headless rendering
+
+Solving is half the pipeline; `outlay/svg` paints. `renderToSvg` takes a solved
+tree and a per-node style callback — fills, strokes, rounded corners, and
+line-broken text — and returns an SVG string:
+
+```ts
+import { solveLayout } from "outlay";
+import { renderToSvg } from "outlay/svg";
+
+const result = solveLayout(tree);
+const svg = renderToSvg(tree, result, {
+  style: (node) => styles.get(node.id), // { fill?, stroke?, radius?, text? }
+});
+```
+
+Text paints through the same numbers it was measured with: `breakLines` (from
+`outlay/text`) shares its quantized fit test with `measureFromAdvances`, so the
+painted lines are exactly the lines the solver sized, and each line carries
+`textLength`, so any SVG viewer reproduces the measured widths even when it
+substitutes a fallback font.
+
+The card at the top of this README is this pipeline end to end:
+[`pages/demos/og-image/generate.ts`](pages/demos/og-image/generate.ts) builds a
+grid tree, measures its text from a committed Inter TTF via `outlay/font`,
+solves, and paints — ~3ms, no browser in the loop. That layout — non-uniform
+`fr` columns, spans, wrapped text driving track sizes — is the part Satori and
+Yoga cannot express.
+
+For debugging or documenting a layout, `renderDebugSvg` draws every resolved
+box with depth colors, ids, and sizes, plus dashed grid-track outlines when
+given a debug trace:
+
+```ts
+import { renderDebugSvg } from "outlay/svg";
+
+const result = solveLayout(tree, { debug: true });
+fs.writeFileSync("layout.svg", renderDebugSvg(tree, result, { trace: result.trace }));
+```
+
+SVG is the supported output. Rasterizing to PNG (for OG images proper) takes
+any SVG rasterizer — `sharp`, `resvg`, or a browser screenshot; outlay
+deliberately stops at the vector.
 
 ## Testing layouts
 
@@ -315,8 +389,8 @@ Coverage boundaries (accepted, but outside the verified fixture set, so treat wi
 ## Non-goals
 
 - No CSS parsing, cascade, or selector matching -- caller provides resolved values
-- No rendering or painting -- output is a position/size map
-- No inline layout or line breaking (use Pretext for text)
+- No raster output -- the core solver produces boxes; `outlay/svg` is a thin optional painter over the result, and PNG/PDF is the caller's rasterizer
+- No rich inline layout (bidi, shaping, mixed inline formatting) -- word-level greedy breaking ships in `outlay/text` / `outlay/font`; use Pretext for browser-grade measurement
 - No floats, no table layout
 - No right-to-left direction or writing modes -- layout is left-to-right, `horizontal-tb`
 - No block-flow margin collapsing, and no auto-height for `display: block` containers (give block containers a definite height)
