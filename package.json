@@ -43,6 +43,16 @@
       "import": "./dist/text.js",
       "default": "./dist/text.js"
     },
+    "./svg": {
+      "types": "./dist/svg.d.ts",
+      "import": "./dist/svg.js",
+      "default": "./dist/svg.js"
+    },
+    "./font": {
+      "types": "./dist/font.d.ts",
+      "import": "./dist/font.js",
+      "default": "./dist/font.js"
+    },
     "./pretext": {
       "types": "./dist/pretext.d.ts",
       "import": "./dist/pretext.js",
@@ -65,6 +75,8 @@
     "test:api": "tsx tests/api.test.ts",
     "test:testing": "tsx tests/testing.test.ts",
     "test:text": "tsx tests/text.test.ts",
+    "test:svg": "tsx tests/svg.test.ts",
+    "test:font": "tsx tests/font.test.ts",
     "test:html": "tsx tests/html.test.ts",
     "test:example": "npm run build && npm --prefix examples/layout-assertions install && npm --prefix examples/layout-assertions test",
     "generate": "tsx tests/generator.ts",

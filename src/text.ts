@@ -19,6 +19,45 @@ export interface WordMetricsTable {
   words: Record<string, number>;
 }
 
+export interface TextLineBreak {
+  /** Word index range [start, end) into the advances array. */
+  start: number;
+  end: number;
+  /** Accumulated line width, floored to LayoutUnit. */
+  width: number;
+}
+
+/**
+ * Greedy line breaking over precomputed per-word advances, returning the word
+ * ranges of each line — for renderers that need to paint the lines a
+ * `measureFromAdvances` measurement implies. Same LayoutUnit-quantized fit
+ * test, so the two always agree.
+ */
+export function breakLines(
+  advances: number[],
+  opts: { spaceWidth: number },
+): (availableWidth: number) => TextLineBreak[] {
+  const { spaceWidth } = opts;
+  return (availableWidth) => {
+    if (advances.length === 0) return [];
+    const lines: TextLineBreak[] = [];
+    let start = 0;
+    let cur = advances[0];
+    for (let i = 1; i < advances.length; i++) {
+      const w = advances[i];
+      if (snapToLayoutUnit(cur + spaceWidth + w) <= availableWidth) {
+        cur += spaceWidth + w;
+      } else {
+        lines.push({ start, end: i, width: snapToLayoutUnit(cur) });
+        start = i;
+        cur = w;
+      }
+    }
+    lines.push({ start, end: advances.length, width: snapToLayoutUnit(cur) });
+    return lines;
+  };
+}
+
 /**
  * Greedy line breaking over precomputed per-word advances — the same
  * algorithm and LayoutUnit quantization the fixture suite verifies against
@@ -29,23 +68,16 @@ export function measureFromAdvances(
   advances: number[],
   opts: { spaceWidth: number; lineHeight: number },
 ): MeasureContent {
-  const { spaceWidth, lineHeight } = opts;
+  const lines = breakLines(advances, opts);
+  const { lineHeight } = opts;
   return (availableWidth) => {
-    if (advances.length === 0) return { width: 0, height: 0 };
-    let lines = 1;
-    let cur = advances[0];
-    let maxLine = cur;
-    for (let i = 1; i < advances.length; i++) {
-      const w = advances[i];
-      if (snapToLayoutUnit(cur + spaceWidth + w) <= availableWidth) {
-        cur += spaceWidth + w;
-      } else {
-        lines++;
-        cur = w;
-      }
-      if (cur > maxLine) maxLine = cur;
+    const broken = lines(availableWidth);
+    if (broken.length === 0) return { width: 0, height: 0 };
+    let maxLine = 0;
+    for (const line of broken) {
+      if (line.width > maxLine) maxLine = line.width;
     }
-    return { width: snapToLayoutUnit(maxLine), height: lines * lineHeight };
+    return { width: maxLine, height: broken.length * lineHeight };
   };
 }
 

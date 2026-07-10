@@ -24,6 +24,7 @@ jobs:
       - run: npm run test:validate
       - run: npm run test:api
       - run: npm run test:text
+      - run: npm run test:svg
       - run: npm run test:html
       - run: npm run test:testing
       - run: npm run package-smoke-test
