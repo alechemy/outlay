@@ -1,5 +1,13 @@
 # TODO
 
+## Release process
+
+- [ ] Write the `## <version>` CHANGELOG.md section *before* running
+      `npm version` — the tag-triggered release workflow checks out the tag
+      and extracts release notes from that commit's CHANGELOG.md, so a bare
+      version-bump tag fails the "Create GitHub release" step (as v1.4.0 did;
+      its GitHub release was created manually from a follow-up commit).
+
 Rendering-track (v1) limitations worth revisiting. Solver-level gaps and
 non-goals are tracked in CLAUDE.md under "Known gaps and non-goals" — this file
 does not duplicate them.

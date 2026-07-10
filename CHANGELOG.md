@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0 — 2026-07-10
+
+- `outlay/render`: `htmlToSvg` — HTML with inline styles to a finished SVG string in one call, the Satori shape with CSS Grid. Text properties (`font-family`, `font-size`, `font-weight`, `line-height`, `color`, `text-align`) inherit down the tree like CSS; the paint vocabulary is solid backgrounds, `border-radius`, and `border-color` (a uniform border paints an inset stroke). `htmlToLayout` returns the `{ tree, styles }` intermediate for solving or inspecting before painting.
+- `outlay/svg`: `renderToSvg`, a styled painter over solved layouts — fills, strokes, rounded corners, and line-broken text with per-line `textLength` and CSS half-leading baselines — and `renderDebugSvg`, a depth-colored box visualizer with grid-track outlines from a debug trace.
+- `outlay/font`: zero-dependency TTF/OTF metrics — `parseFont`, `wordAdvance`, `spaceAdvance`, and `measureText` to a `measureContent` callback. Advances are unshaped (kerning off), verified against Chromium to 0.015px with committed Inter ground truth.
+- `outlay/text` gains `breakLines`: word-range line breaking that shares `measureFromAdvances`' LayoutUnit-quantized fit test, so painted lines always match measured layout.
+- `parseHTML` gains an opt-in render mode (second parameter) used by `outlay/render`: text nodes become block `measureContent` leaves and inherited text + solid-color paint CSS is collected per node. Without it, behavior is byte-for-byte unchanged — text and paint properties still throw.
+- New OG-image demo: a 1200×630 CSS Grid card — non-uniform `fr` columns, spans, text wrapped at the `fr`-resolved width — measured from a font file and painted to SVG in ~3ms with no browser.
+- Rendering-track v1 limitations are tracked in TODO.md.
+
 ## 1.3.0 — 2026-07-06
 
 - `parseHTML` accepts percentage `width`/`height`/`flex-basis` (including the `flex` shorthand), matching the solver vocabulary; percentages remain rejected where unsupported (min/max, padding, tracks).
