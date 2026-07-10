@@ -5,28 +5,26 @@
  * fr columns, column and row spans, fr rows, nested flex tiles, and paragraph
  * text wrapped at the fr-resolved column width — solves it with `solveLayout`,
  * and paints it with the `outlay/svg` renderer. No browser, no WASM, no
- * async: the only inputs are the tree and the committed word advances
- * (word-metrics.json, captured once by capture-metrics.ts).
+ * async: the only inputs are the tree and a font file, measured through
+ * `outlay/font`.
  *
  *   npx tsx pages/demos/og-image/generate.ts [output.svg]
  */
 
 import * as fs from "fs";
 import * as path from "path";
+import { parseFont, spaceAdvance, wordAdvance } from "../../../src/font";
 import { solveLayout } from "../../../src/solver";
 import { renderToSvg, type SvgBoxStyle, type SvgTextLine } from "../../../src/svg";
 import { breakLines, measureFromAdvances, textNode } from "../../../src/text";
 import type { LayoutNode } from "../../../src/types";
-import { CARD, FONTS, wordsOf, type FontRole } from "./content";
+import { CARD, FONT_FAMILY, FONTS, type FontRole } from "./content";
 
-interface RoleMetrics {
-  spaceWidth: number;
-  words: Record<string, number>;
-}
-
-const METRICS = JSON.parse(
-  fs.readFileSync(path.join(import.meta.dirname, "word-metrics.json"), "utf8"),
-) as Record<FontRole, RoleMetrics>;
+const FONT = parseFont(
+  fs.readFileSync(
+    path.join(import.meta.dirname, "../../../tests/assets/Inter-Regular.ttf"),
+  ),
+);
 
 const styles = new Map<string, SvgBoxStyle>();
 
@@ -42,16 +40,10 @@ function text(
   color: string,
   props?: Omit<LayoutNode, "measureContent" | "children">,
 ): LayoutNode {
-  const { spaceWidth, words: table } = METRICS[role];
-  const words = wordsOf(content);
-  const advances = words.map((word) => {
-    const advance = table[word];
-    if (advance === undefined) {
-      throw new Error(`no advance for "${word}" (${role}); re-run capture-metrics.ts`);
-    }
-    return advance;
-  });
-  const font = FONTS[role];
+  const { size, weight, lineHeight } = FONTS[role];
+  const words = content.split(/\s+/).filter(Boolean);
+  const advances = words.map((word) => wordAdvance(FONT, word, size));
+  const spaceWidth = spaceAdvance(FONT, size);
   const breaker = breakLines(advances, { spaceWidth });
   const lines = (contentWidth: number): SvgTextLine[] =>
     breaker(contentWidth).map((l) => ({
@@ -61,17 +53,19 @@ function text(
   styles.set(id, {
     text: {
       lines,
-      fontFamily: font.family,
-      fontSize: font.size,
-      fontWeight: font.weight,
-      lineHeight: font.lineHeight,
+      fontFamily: FONT_FAMILY,
+      fontSize: size,
+      fontWeight: weight,
+      lineHeight,
       color,
+      ascent: (FONT.ascent / FONT.unitsPerEm) * size,
+      descent: (FONT.descent / FONT.unitsPerEm) * size,
     },
   });
-  return textNode(
-    measureFromAdvances(advances, { spaceWidth, lineHeight: font.lineHeight }),
-    { id, ...props },
-  );
+  return textNode(measureFromAdvances(advances, { spaceWidth, lineHeight }), {
+    id,
+    ...props,
+  });
 }
 
 const STAT_COLORS = ["#8ab4ff", "#7fe0c3", "#ffd479", "#f7a8d8"];
