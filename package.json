@@ -73,8 +73,9 @@
     "bench": "tsx scripts/benchmark.ts",
     "package-smoke-test": "tsx scripts/package-smoke-test.ts",
     "start": "vite",
-    "site:build": "vite build --base=/outlay/ && mkdir -p site/demos/server-layout && cp pages/demos/server-layout/example-output.svg site/demos/server-layout/",
+    "site:build": "vite build --base=/outlay/ && mkdir -p site/demos/server-layout site/demos/og-image && cp pages/demos/server-layout/example-output.svg site/demos/server-layout/ && cp pages/demos/og-image/card.svg site/demos/og-image/",
     "demo:server-layout": "tsx pages/demos/server-layout/generate.ts",
+    "demo:og-image": "tsx pages/demos/og-image/generate.ts",
     "verify:explorer": "tsx scripts/verify-explorer.ts",
     "verify:text-demo": "tsx scripts/verify-text-demo.ts",
     "verify:html-demo": "tsx scripts/verify-html-playground.ts"
